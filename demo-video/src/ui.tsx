@@ -62,8 +62,9 @@ export function Footage({ src, rate = 1, from = 0, cam = [{ at: 0, x: 960, y: 54
 }
 
 /** macOS-style browser window with the live URL. */
-export function Browser({ url, children, style, w = 1600, delay = 0 }: { url: string; children: ReactNode; style?: CSSProperties; w?: number; delay?: number }) {
-  const p = useIn(delay, 20);
+export function Browser({ url, children, style, w = 1600, delay = 0, enter = true }: { url: string; children: ReactNode; style?: CSSProperties; w?: number; delay?: number; enter?: boolean }) {
+  const spring = useIn(delay, 20);
+  const p = enter ? spring : 1; // no entrance when dissolving in under the previous shot
   const h = Math.round((w * 9) / 16);
   return (
     <div style={{
@@ -82,6 +83,13 @@ export function Browser({ url, children, style, w = 1600, delay = 0 }: { url: st
       <div style={{ position: "relative", width: w, height: h }}>{children}</div>
     </div>
   );
+}
+
+/** Fade a sub-shot out over `frames` starting at `start` (frames relative to its Sequence). */
+export function FadeOut({ start, frames = 10, children }: { start: number; frames?: number; children: ReactNode }) {
+  const f = useCurrentFrame();
+  const o = interpolate(f, [start, start + frames], [1, 0], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
+  return <AbsoluteFill style={{ opacity: o }}>{children}</AbsoluteFill>;
 }
 
 /** Bottom caption pill; each item = [startFrame, endFrame, text]. */

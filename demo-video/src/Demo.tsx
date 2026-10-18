@@ -4,12 +4,14 @@ import { Bug, Close, Hard, Hook, Live, Memory, Pay, Primitive, Reveal, Value } f
 import { FPS, VO_DELAY } from "./timing";
 
 export { FPS };
-// Extra frames after each voice line, tuned per scene for pacing (the whole cut stays under 2:00).
-const PAD: Record<string, number> = { live: 12, close: 30 };
+import pads from "./pads.json";
+
+// Extra frames after each voice line, tuned per scene for pacing (the whole cut stays under 2:00). Shared with bake.mjs.
+const PAD: Record<string, number> = pads;
 const SCENES = { hook: Hook, hard: Hard, reveal: Reveal, pay: Pay, primitive: Primitive, live: Live, bug: Bug, memory: Memory, value: Value, close: Close };
 
 const plan = (timeline as { id: keyof typeof SCENES; seconds: number }[]).map((t) => ({
-  ...t, frames: VO_DELAY + Math.ceil(t.seconds * FPS) + (PAD[t.id] ?? 6),
+  ...t, frames: VO_DELAY + Math.ceil(t.seconds * FPS) + (PAD[t.id] ?? PAD.default),
 }));
 export const totalFrames = () => plan.reduce((a, s) => a + s.frames, 0);
 

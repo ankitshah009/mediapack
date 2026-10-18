@@ -1,0 +1,26 @@
+{
+  "payUpload": {
+    "file": "payUpload.mp4",
+    "rate": 4.81,
+    "trim": 0,
+    "frames": 159
+  },
+  "live": {
+    "file": "live.mp4",
+    "rate": 1.4,
+    "trim": 1.2,
+    "frames": 255
+  },
+  "bugAnswer": {
+    "file": "bugAnswer.mp4",
+    "rate": 2.78,
+    "trim": 0,
+    "frames": 177
+  },
+  "bugEvidence": {
+    "file": "bugEvidence.mp4",
+    "rate": 2.72,
+    "trim": 0,
+    "frames": 145
+  }
+}

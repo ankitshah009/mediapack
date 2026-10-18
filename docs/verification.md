@@ -32,7 +32,21 @@ The same session also checked the other public surfaces:
 | Unauthenticated `/internal/tick` | 401 |
 | Manufact MCP | initialize, 9 tools, and `get_job` on the paid job all succeeded; without a capability → `UNAUTHORIZED` tool error |
 
-**Not exercised in this pass:** a new paid purchase. The paid path last passed on r6 (see below).
+**Fresh paid run on r11.** A new agent owner ran the CLI (`demo-video/.cache/rehearse.sh`) against the public URL. Every step exited 0:
+
+| Step | Time |
+| --- | --- |
+| Upload | 1 s |
+| Verification | 11 s |
+| Quote ($0.50 USD, test) | 0 s |
+| HTTP 402 → Stripe test purchase | 8 s |
+| Indexing to ready | 27 s |
+| Search 1 | 9 s |
+| Search 2 | 5 s |
+
+- **Payment:** `paid`, with a test-mode PaymentIntent and a pack expiring 24 h after payment.
+- **Search 1** answered "visible request timeout is 30 seconds, different from the saved 60 seconds", citing 0:38–0:48 (supported).
+- **Search 2** asked "Does anyone delete the workspace?" and returned "No evidence … found" with no citations.
 
 ## Stable origin and dashboard r8/r9 (2026-10-18 UTC)
 

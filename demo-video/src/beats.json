@@ -1,0 +1,222 @@
+{
+ "hook": [
+  {
+   "text": "So much of what teams know lives in video:",
+   "start": 0,
+   "end": 2.6
+  },
+  {
+   "text": "bug reports, meetings, lectures, support calls.",
+   "start": 2.72,
+   "end": 5.85
+  },
+  {
+   "text": "Agents read every log and doc.",
+   "start": 5.97,
+   "end": 8.29
+  },
+  {
+   "text": "Hand them a video, and they're blind.",
+   "start": 8.41,
+   "end": 10.71
+  }
+ ],
+ "hard": [
+  {
+   "text": "Because video is hard.",
+   "start": 0,
+   "end": 1.68
+  },
+  {
+   "text": "Nearly two thousand frames a minute, with meaning split between what's shown and what's said.",
+   "start": 1.8,
+   "end": 6.62
+  },
+  {
+   "text": "One look costs hundreds of thousands of tokens.",
+   "start": 6.74,
+   "end": 9.69
+  },
+  {
+   "text": "Answers come without proof.",
+   "start": 9.81,
+   "end": 11.59
+  },
+  {
+   "text": "And an agent can't just sign up and pay.",
+   "start": 11.71,
+   "end": 14.18
+  }
+ ],
+ "reveal": [
+  {
+   "text": "MediaPack fixes all of it.",
+   "start": 0,
+   "end": 2.03
+  },
+  {
+   "text": "Index a video once, ask anything, and get answers pinned to the second, with proof.",
+   "start": 2.15,
+   "end": 6.74
+  },
+  {
+   "text": "Agents pay per use.",
+   "start": 6.87,
+   "end": 8.62
+  }
+ ],
+ "pay": [
+  {
+   "text": "Upload a recording.",
+   "start": 0,
+   "end": 1.55
+  },
+  {
+   "text": "The server verifies the real file and quotes fifty cents.",
+   "start": 1.67,
+   "end": 5.17
+  },
+  {
+   "text": "The agent pays for itself with Stripe machine payments:",
+   "start": 5.29,
+   "end": 8.59
+  },
+  {
+   "text": "the price arrives as an HTTP four-oh-two.",
+   "start": 8.71,
+   "end": 11.86
+  },
+  {
+   "text": "No account.",
+   "start": 11.98,
+   "end": 13.31
+  },
+  {
+   "text": "No API key.",
+   "start": 13.43,
+   "end": 15.05
+  },
+  {
+   "text": "No checkout.",
+   "start": 15.17,
+   "end": 16.65
+  }
+ ],
+ "primitive": [
+  {
+   "text": "Then the work travels as email over Primitive.",
+   "start": 0,
+   "end": 2.88
+  },
+  {
+   "text": "Every job is a real thread:",
+   "start": 3,
+   "end": 5.12
+  },
+  {
+   "text": "a work order out, and a verified result back from an isolated Blaxel worker running ffmpeg, Whisper and vision.",
+   "start": 5.24,
+   "end": 12.49
+  },
+  {
+   "text": "Deduplicated, and retrievable after the job is done.",
+   "start": 12.61,
+   "end": 16.09
+  }
+ ],
+ "live": [
+  {
+   "text": "Watch it live on a sample talk.",
+   "start": 0,
+   "end": 2.1
+  },
+  {
+   "text": "One question, emailed to a worker, and answered in under ten seconds, pinned to the moment it was said.",
+   "start": 2.22,
+   "end": 8
+  }
+ ],
+ "bug": [
+  {
+   "text": "On a bug recording, it catches the regression:",
+   "start": 0,
+   "end": 2.73
+  },
+  {
+   "text": "saved as sixty, shown as thirty after reload.",
+   "start": 2.85,
+   "end": 5.77
+  },
+  {
+   "text": "Click the citation and the source jumps there, with every frame and clip hash-verified.",
+   "start": 5.89,
+   "end": 10.77
+  }
+ ],
+ "memory": [
+  {
+   "text": "Index once, ask many times.",
+   "start": 0,
+   "end": 2.23
+  },
+  {
+   "text": "Three hundred twenty-seven thousand tokens to index.",
+   "start": 2.35,
+   "end": 5.6
+  },
+  {
+   "text": "About twenty-five hundred per question after that.",
+   "start": 5.72,
+   "end": 8.72
+  }
+ ],
+ "value": [
+  {
+   "text": "Every piece earns its place.",
+   "start": 0,
+   "end": 1.9
+  },
+  {
+   "text": "Stripe for agent payments.",
+   "start": 2.02,
+   "end": 3.92
+  },
+  {
+   "text": "Primitive for an auditable thread per job.",
+   "start": 4.04,
+   "end": 6.69
+  },
+  {
+   "text": "Blaxel for isolated runs that scale to zero.",
+   "start": 6.81,
+   "end": 10.09
+  },
+  {
+   "text": "Supabase for limits enforced in Postgres.",
+   "start": 10.21,
+   "end": 13.01
+  },
+  {
+   "text": "And Manufact, so any agent plugs in over MCP.",
+   "start": 13.13,
+   "end": 16.65
+  }
+ ],
+ "close": [
+  {
+   "text": "MediaPack.",
+   "start": 0,
+   "end": 1.35
+  },
+  {
+   "text": "Searchable, payable, provable video for agents.",
+   "start": 1.47,
+   "end": 4.55
+  },
+  {
+   "text": "Live today, and open source.",
+   "start": 4.67,
+   "end": 6.84
+  }
+ ]
+}

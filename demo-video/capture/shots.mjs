@@ -4,6 +4,7 @@
 import { existsSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
+import { spawn } from "node:child_process";
 import { ORIGIN, go, launch, moveTo, record, scrollBy } from "./recorder.mjs";
 
 const OUT = resolve("public/footage");
@@ -116,7 +117,35 @@ async function limits() {
   await s.browser.close();
 }
 
+// A real search on the paid talk pack, recorded while it runs: Primitive email -> Blaxel worker -> answer.
+async function live() {
+  const talkJob = process.env.TALK_JOB_ID ?? "d5df3fe7-5f75-4e56-87ed-bc1a0e7cbd7c";
+  const question = process.env.QUESTION ?? "What are the hackathon tracks, and what does the overall winner get?";
+  const s = await launch({ storageState: storage });
+  await go(s, `${ORIGIN}/app/jobs/${talkJob}`);
+  await s.page.getByText(/^Query$/i).first().waitFor({ timeout: 30_000 });
+  await s.page.waitForTimeout(1500);
+  const stop = await record(s, OUT, "live");
+  await s.page.waitForTimeout(1500);
+  const t0 = Date.now();
+  const child = spawn("node", [resolve("../scripts/mediapack.mjs"), "search", talkJob, question, "--wait", "--timeout", "180"], {
+    env: { ...process.env, MEDIAPACK_URL: ORIGIN, MEDIAPACK_CONFIG: process.env.CLIENT_CONFIG }, stdio: ["ignore", "pipe", "pipe"],
+  });
+  let out = ""; child.stdout.on("data", (d) => { out += d; });
+  const code = await new Promise((done) => child.on("close", done));
+  console.log("search exit", code, "in", ((Date.now() - t0) / 1000).toFixed(1), "s");
+  await s.page.waitForTimeout(3500); // let the dashboard poll the committed result
+  const match = s.page.locator("text=/^\\d+:\\d{2}–\\d+:\\d{2}$/").first();
+  if (await match.count()) { await moveTo(s, match, { duration: 900 }); await s.page.mouse.down(); await s.page.mouse.up(); }
+  await s.page.waitForTimeout(3500);
+  console.log("live ->", await stop());
+  try { const j = JSON.parse(out); const r = j.result ?? j.operation?.result ?? {}; console.log("ANSWER:", r.answer); console.log("MATCHES:", JSON.stringify((r.matches ?? []).map((m) => [m.start_ms, m.end_ms]))); }
+  catch { console.log("raw:", out.slice(0, 600)); }
+  await s.browser.close();
+}
+
 if (shot === "upload") await upload();
+else if (shot === "live") await live();
 else if (shot === "limits") await limits();
 else if (shot === "tour") await tour();
 else throw new Error("usage: shots.mjs upload | tour <storage-state.json>");

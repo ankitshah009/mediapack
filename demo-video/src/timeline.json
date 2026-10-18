@@ -1,42 +1,42 @@
 [
   {
     "id": "hook",
-    "seconds": 6.08
+    "seconds": 10.53
+  },
+  {
+    "id": "hard",
+    "seconds": 13.94
   },
   {
     "id": "reveal",
-    "seconds": 3.91
-  },
-  {
-    "id": "upload",
-    "seconds": 10.92
+    "seconds": 8.49
   },
   {
     "id": "pay",
-    "seconds": 13.35
+    "seconds": 16.29
   },
   {
-    "id": "pipeline",
-    "seconds": 10.9
+    "id": "primitive",
+    "seconds": 15.91
   },
   {
-    "id": "answer",
-    "seconds": 10.05
+    "id": "live",
+    "seconds": 7.94
   },
   {
-    "id": "evidence",
-    "seconds": 6.16
+    "id": "bug",
+    "seconds": 10.65
   },
   {
     "id": "memory",
-    "seconds": 11.72
+    "seconds": 8.6
   },
   {
-    "id": "limits",
-    "seconds": 8.3
+    "id": "value",
+    "seconds": 16.35
   },
   {
     "id": "close",
-    "seconds": 8.54
+    "seconds": 6.72
   }
 ]

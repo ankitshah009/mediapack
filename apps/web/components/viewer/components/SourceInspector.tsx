@@ -47,12 +47,13 @@ export function SourceInspector({
   // Seek when a match is selected from the results list.
   const active = matches.find((m) => m.match_id === activeMatchId);
   const activeStart = active?.start_ms;
+  // `src` is a dependency too: a match chosen before the signed source URL arrives must still seek once the player mounts.
   useEffect(() => {
     if (activeStart !== undefined && video.current) {
       video.current.currentTime = activeStart / 1000;
       setT(activeStart);
     }
-  }, [activeMatchId, activeStart]);
+  }, [activeMatchId, activeStart, src]);
 
   const seek = (ms: number) => {
     if (video.current) video.current.currentTime = ms / 1000;
@@ -195,7 +196,7 @@ export function SourceInspector({
                 Add {mmss(t)}
               </Button>
               <Button variant="primary" busy={busy === "frames"} disabled={!!frameProblem} onClick={submitFrames}>
-                Get {frames.length || ""} frame{frames.length === 1 ? "" : "s"}
+                Get {frames.length ? `${frames.length} ` : ""}frame{frames.length === 1 ? "" : "s"}
               </Button>
             </div>
             {frameProblem && frames.length > 0 && <p className="mt-1 text-xs text-danger">{frameProblem}</p>}

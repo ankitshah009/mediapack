@@ -2,6 +2,38 @@
 
 This file distinguishes actual provider verification from local fixtures. The newest cloud record comes first; older sections retain the historical results and account blockers that existed at their recorded dates.
 
+## Live end-to-end browser check, r11 (2026-10-18 UTC)
+
+`demo-video/capture/e2e-live.mjs` drove the public URL from a fresh Chrome profile and passed **26/26** checks:
+
+- **Upload with no session:** a fresh visitor rejected a non-video file client-side. An upload with no session then started one automatically; this was the reported "Missing or invalid credentials" bug, fixed in r10. The video page loaded in 1.4 s.
+- **Verification and quote:** ffprobe verification on a Blaxel worker finished in 11.2 s with the real metadata (0:53 · 1280×800). The quote page showed $0.50 with the HTTP 402 buy command and Upload → Verify media → Purchase steps.
+- **Pairing:** an invalid code showed an error; a valid one showed the agent's videos.
+- **Paid settings job:**
+  - the cited 0:40–0:48 answer seeks the source to 40.0 s even when clicked before the signed source URL loads (fixed in r11)
+  - 4 frames and 2 clips load
+  - the receipt and allowance render
+  - 12 steps / 49 events, with the raw toggle working both ways
+  - the exhausted pack is explained
+  - no `[object Object]` anywhere
+- **Real extraction:** one frame on the paid talk pack went Primitive → Blaxel worker → Storage → UI in 6.0 s.
+- **Mobile:** at 390 px there was no horizontal scroll, and upload plus verification of the speech video worked.
+- **No uncaught page errors.**
+
+The same session also checked the other public surfaces:
+
+| Surface | Result |
+| --- | --- |
+| `/health` | all integrations true |
+| `/llms.txt` | 200 |
+| Unauthenticated `/v1/videos` | `{error, hint, next_action}` with `UNAUTHORIZED` |
+| Forged Primitive webhook | 401 |
+| Forged Stripe webhook | 400 |
+| Unauthenticated `/internal/tick` | 401 |
+| Manufact MCP | initialize, 9 tools, and `get_job` on the paid job all succeeded; without a capability → `UNAUTHORIZED` tool error |
+
+**Not exercised in this pass:** a new paid purchase. The paid path last passed on r6 (see below).
+
 ## Stable origin and dashboard r8/r9 (2026-10-18 UTC)
 
 - **Stable URL.** A second Blaxel preview with `prefixUrl: mediapack` served `https://mediapack-mediapack.preview.bl.run`, and `/health` returned database OK with every integration configured. `scripts/host-blaxel.mjs --stable-prefix mediapack --move-from <old>` then deployed r8 (`sandbox/mediapack-web:bc1db435fcf9f8138bf54`) and then r9 (`sandbox/mediapack-web:b3df59cc77af80222164d`). Each time it checked the new release preview, moved the stable preview, and read back `/health` 200 with database OK, no missing settings, `keepAlive: false` and a 24-hour idle-delete policy.

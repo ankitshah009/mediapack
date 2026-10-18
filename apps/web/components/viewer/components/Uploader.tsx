@@ -13,7 +13,7 @@ type Phase =
   | { k: "completing"; file: File }
   | { k: "error"; file?: File; message: string; code?: string };
 
-export function Uploader({ onUploaded }: { onUploaded?: () => void }) {
+export function Uploader({ onUploaded, onSession }: { onUploaded?: () => void; onSession?: () => void }) {
   const navigate = useNavigate();
   const [phase, setPhase] = useState<Phase>({ k: "idle" });
   const [drag, setDrag] = useState(false);
@@ -21,6 +21,18 @@ export function Uploader({ onUploaded }: { onUploaded?: () => void }) {
   const ctl = useRef<AbortController | null>(null);
   const reqIds = useRef(new Map<string, string>());
   const busy = phase.k === "creating" || phase.k === "uploading" || phase.k === "completing";
+
+  /** Uploading needs a browser owner: start the same anonymous session as "Start new session" when there is none yet. */
+  async function create(body: Parameters<typeof Api.createVideo>[0]) {
+    try {
+      return await Api.createVideo(body);
+    } catch (e) {
+      if (!(e instanceof ApiError) || e.code !== "UNAUTHORIZED") throw e;
+      await Api.bootstrap();
+      onSession?.();
+      return await Api.createVideo(body);
+    }
+  }
 
   async function start(file: File) {
     const reject = preflight(file);
@@ -31,7 +43,7 @@ export function Uploader({ onUploaded }: { onUploaded?: () => void }) {
     ctl.current = new AbortController();
     try {
       setPhase({ k: "creating", file });
-      const created = await Api.createVideo({
+      const created = await create({
         request_id: rid,
         file_name: file.name,
         size_bytes: file.size,

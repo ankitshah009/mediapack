@@ -27,7 +27,7 @@ export function VideosPage() {
   return (
     <Shell crumb={<span>Videos</span>}>
       <h1 className="sr-only">Videos</h1>
-      <Uploader onUploaded={list.reload} />
+      <Uploader onUploaded={list.reload} onSession={() => setSession((s) => s + 1)} />
       <section aria-labelledby="your-videos">
         <h2 id="your-videos" className="mb-3 font-display text-base font-semibold tracking-tight">
           Your videos

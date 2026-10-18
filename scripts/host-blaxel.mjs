@@ -16,6 +16,7 @@ const { values } = parseArgs({ options: {
   workspace: { type: 'string', default: 'mediapack' }, region: { type: 'string', default: 'us-pdx-1' },
   'env-file': { type: 'string', default: 'apps/web/.env.blaxel' },
   'idle-ttl': { type: 'string', default: '1h' },
+  'stable-prefix': { type: 'string' }, 'move-from': { type: 'string' },
   restart: { type: 'boolean', default: false }, help: { type: 'boolean', short: 'h' },
 } });
 
@@ -48,12 +49,16 @@ function missingProviderSettings(env) {
 
 async function main() {
   if (values.help) {
-    console.log('Usage: node scripts/host-blaxel.mjs --image sandbox/mediapack-web:<immutable-tag> [--env-file apps/web/.env.blaxel] [--idle-ttl 1h..24h] [--restart]\nCreates/reuses the web sandbox and its public preview. Runtime values stay out of build images and logs.\nIdle deletion defaults to 1h; use --idle-ttl 24h to keep a demo URL through judging. Standby remains enabled.\n--restart stops only this sandbox’s named web process before starting it with current configuration.\nUse a new --name for a new image; existing sandbox images are never silently replaced.');
+    console.log('Usage: node scripts/host-blaxel.mjs --image sandbox/mediapack-web:<immutable-tag> [--env-file apps/web/.env.blaxel] [--idle-ttl 1h..24h] [--restart] [--stable-prefix NAME [--move-from OLD_SANDBOX]]\nCreates/reuses the web sandbox and its public preview. Runtime values stay out of build images and logs.\nIdle deletion defaults to 1h; use --idle-ttl 24h to keep a demo URL through judging. Standby remains enabled.\n--restart stops only this sandbox’s named web process before starting it with current configuration.\nUse a new --name for a new image; existing sandbox images are never silently replaced.\n--stable-prefix serves the app at https://NAME-WORKSPACE.preview.bl.run and uses it as PUBLIC_BASE_URL, so webhooks and MCP keep one origin across releases. --move-from moves that stable preview off the previous sandbox after the new process is healthy.');
     return;
   }
   const idleHours = /^([1-9]|1[0-9]|2[0-4])h$/.exec(values['idle-ttl']);
   if (!idleHours) throw new HostingError('--idle-ttl must be a whole number of hours between 1h and 24h.');
   const expirationPolicies = [{ type: 'ttl-idle', value: values['idle-ttl'], action: 'delete' }];
+  const prefix = values['stable-prefix'];
+  if (prefix !== undefined && !/^[a-z0-9][a-z0-9-]{0,30}$/.test(prefix)) throw new HostingError('--stable-prefix must be lowercase letters, digits and dashes.');
+  if (values['move-from'] && !prefix) throw new HostingError('--move-from requires --stable-prefix.');
+  const stableOrigin = prefix ? `https://${prefix}-${values.workspace}.preview.bl.run` : undefined;
   if (!/^sandbox\/mediapack-web:[a-zA-Z0-9_.-]+$/.test(values.image ?? '') || values.image.endsWith(':latest')) {
     throw new HostingError('Supply the successfully built immutable sandbox/mediapack-web:<tag> image.');
   }
@@ -85,8 +90,9 @@ async function main() {
   phase = 'create or retrieve the public preview';
   const preview = await sandbox.previews.createIfNotExists({ metadata: { name: 'web' }, spec: { port: 3000, public: true } });
   if (!preview.spec?.public || preview.spec.port !== 3000) throw new HostingError('Existing web preview has a different privacy/port configuration; review it in the Blaxel Console.');
-  const origin = new URL(preview.spec.url).origin;
-  if (!origin.startsWith('https://')) throw new HostingError('Blaxel returned a non-HTTPS preview.');
+  const releaseOrigin = new URL(preview.spec.url).origin;
+  if (!releaseOrigin.startsWith('https://')) throw new HostingError('Blaxel returned a non-HTTPS preview.');
+  const origin = stableOrigin ?? releaseOrigin;
   Object.assign(env, { NODE_ENV: 'production', PAYMENTS_MODE: 'test', PORT: '3000', PUBLIC_BASE_URL: origin,
     BL_WORKSPACE: values.workspace, BL_REGION: values.region });
   // Blaxel injects HOST for the sandbox interface; avoid assuming IPv4 routing.
@@ -121,10 +127,27 @@ async function main() {
     await new Promise(done => setTimeout(done, 500));
   } while (Date.now() < deadline);
   if (status.status !== 'running' || !ready) throw new HostingError('Next.js did not report a ready running process. Inspect its private logs.');
-  const health = await fetch(`${origin}/health`, { signal: AbortSignal.timeout(30_000), redirect: 'error' });
-  if (!health.ok) throw new HostingError(`Public health check returned HTTP ${health.status}.`);
+  const releaseHealth = await fetch(`${releaseOrigin}/health`, { signal: AbortSignal.timeout(30_000), redirect: 'error' });
+  if (!releaseHealth.ok) throw new HostingError(`Release preview health check returned HTTP ${releaseHealth.status}.`);
+  if (prefix) {
+    // A prefix URL belongs to one preview at a time: cut over only after the new process is healthy.
+    phase = 'move the stable preview to this release';
+    if (values['move-from'] && values['move-from'] !== values.name) {
+      const old = await SandboxInstance.get(values['move-from']);
+      if ((await old.previews.list()).some(p => p.metadata?.name === 'stable')) await old.previews.delete('stable');
+    }
+    const stable = await sandbox.previews.createIfNotExists({ metadata: { name: 'stable' }, spec: { port: 3000, public: true, prefixUrl: prefix } });
+    if (new URL(stable.spec.url).origin !== stableOrigin) throw new HostingError(`Blaxel assigned ${stable.spec.url}, not ${stableOrigin}. Update PUBLIC_BASE_URL consumers before retrying.`);
+  }
+  let health;
+  for (let i = 0; i < 10; i++) {
+    health = await fetch(`${origin}/health`, { signal: AbortSignal.timeout(30_000), redirect: 'error' }).catch(() => undefined);
+    if (health?.ok) break;
+    await new Promise(done => setTimeout(done, 2000));
+  }
+  if (!health?.ok) throw new HostingError(`Public health check on ${origin} returned HTTP ${health?.status ?? 'no response'}.`);
   const healthBody = await health.json();
-  const report = { sandbox: values.name, image: values.image, origin, app_url: `${origin}/app`,
+  const report = { sandbox: values.name, image: values.image, origin, release_origin: releaseOrigin, app_url: `${origin}/app`,
     process: processName, process_status: status.status, next_ready: ready, health_status: health.status, database: healthBody.database,
     missing_provider_settings_in_env_file: missingProviderSettings(env),
     keep_alive: status.keepAlive,

@@ -28,7 +28,7 @@ function ClipItem({ a }: { a: ArtifactRef }) {
   return (
     <li className="overflow-hidden rounded-xl border border-line bg-card">
       {url ? (
-        <video controls preload="metadata" src={url} className="aspect-video w-full bg-code" aria-label={`Exported clip ${range(a.actual_ms.start, a.actual_ms.end ?? a.actual_ms.start)}`} />
+        <video controls preload="metadata" src={`${url}#t=0.1`} className="aspect-video w-full bg-code" aria-label={`Exported clip ${range(a.actual_ms.start, a.actual_ms.end ?? a.actual_ms.start)}`} />
       ) : (
         <div className="grid aspect-video place-items-center bg-code text-xs text-rail-text/70">{err ? "Could not authorize this clip" : "Authorizing clip…"}</div>
       )}

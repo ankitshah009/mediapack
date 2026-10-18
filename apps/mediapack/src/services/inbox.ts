@@ -8,6 +8,19 @@ import { kickOutbox } from "./outbox.js";
 import { applyWorkResult } from "./operations.js";
 import { signWorkerToken } from "./workerTokens.js";
 
+/** Readable, bounded text for a launch failure; provider SDKs sometimes throw plain objects. */
+export function launchErrorText(e: unknown): string {
+  if (e instanceof Error) return e.message;
+  if (typeof e === "string") return e;
+  if (e && typeof e === "object") {
+    const o = e as Record<string, unknown>;
+    const m = [o.message, o.error, o.detail, o.code].find((v) => typeof v === "string" && v.trim());
+    if (typeof m === "string") return m.slice(0, 300);
+    try { return JSON.stringify(e).slice(0, 300); } catch { /* fall through */ }
+  }
+  return "unknown provider error";
+}
+
 const SOFT_DEADLINE_MS = 8000;
 const SUBJECT = /^\s*(?:re:\s*)?\[mp:([0-9a-f-]{36}):g(\d+)\]/i;
 
@@ -142,7 +155,7 @@ async function launchFromRequest(ctx: Ctx, mail: StoredMail, body: unknown, opId
     });
     return { state: "applied", detail: recorded ? `launched ${launched.sandboxName}` : "launch returned after its generation was superseded" };
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
+    const msg = launchErrorText(e);
     console.error(`[launch ${opId}] failed: ${msg}`);
     await ctx.sql`select fail_or_retry_operation(${opId}::uuid, ${gen}, 'WORKER_FAILED', ${"worker launch failed: " + msg}, true)`;
     kickOutbox(ctx);

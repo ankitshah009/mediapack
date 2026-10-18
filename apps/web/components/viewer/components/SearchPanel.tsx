@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Api, ApiError, type JobView, type OperationView } from "../api/client";
 import { toApiError } from "../api/hooks";
 import type { SearchResult } from "../api/types";
-import { requestIdFor, settleRequest } from "../lib/format";
+import { readableError, requestIdFor, settleRequest } from "../lib/format";
 import { ErrorPanel } from "./Shell";
 import { AllowanceChips, SearchResultBlock } from "./results";
 import { Badge, Button, Card, SectionTitle, Spinner } from "./ui";
@@ -101,7 +101,7 @@ export function SearchPanel({
       {gate === "failed" && (
         <div role="alert" className="rounded-xl border border-danger/30 bg-danger-soft p-3 text-sm">
           <p className="font-medium text-danger">The worker failed</p>
-          <p className="mt-0.5">{indexOp?.error?.message ?? job.next_action}</p>
+          <p className="mt-0.5">{indexOp?.error ? readableError(indexOp.error.message) : job.next_action}</p>
           <p className="mt-1 text-xs text-muted">Your payment is preserved and no second pack is bought automatically. {indexOp?.error?.code && <Badge tone="danger">{indexOp.error.code}</Badge>}</p>
         </div>
       )}
@@ -116,7 +116,7 @@ export function SearchPanel({
       {failed.map((o) => (
         <div key={o.operation_id} role="alert" className="mt-4 rounded-xl border border-danger/30 bg-danger-soft p-3 text-sm">
           <p className="font-medium text-danger">Search failed: “{String(o.input.query ?? "")}”</p>
-          <p className="mt-0.5">{o.error?.message ?? "The worker did not return a result."} {o.error?.code && <Badge tone="danger">{o.error.code}</Badge>}</p>
+          <p className="mt-0.5">{readableError(o.error?.message, "The worker did not return a result.")} {o.error?.code && <Badge tone="danger">{o.error.code}</Badge>}</p>
         </div>
       ))}
 

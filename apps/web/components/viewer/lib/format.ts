@@ -74,3 +74,9 @@ export function requestIdFor(payloadKey: string): string {
 export function settleRequest(payloadKey: string) {
   pending.delete(payloadKey);
 }
+
+/** Provider error text for display: never show a stringified object. */
+export function readableError(msg: string | null | undefined, fallback = "No detail was reported."): string {
+  if (!msg) return fallback;
+  return msg.includes("[object Object]") ? msg.replace(/:?\s*\[object Object\]/g, "").trim() + " (the provider returned no readable detail)" : msg;
+}

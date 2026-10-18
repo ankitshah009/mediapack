@@ -7,7 +7,7 @@
     "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint",
-    "test": "node --test lib/**/*.test.ts components/viewer/api/*.test.ts"
+    "test": "node --test lib/**/*.test.ts components/viewer/api/*.test.ts components/viewer/lib/*.test.ts"
   },
   "dependencies": {
     "@blaxel/core": "0.3.30",

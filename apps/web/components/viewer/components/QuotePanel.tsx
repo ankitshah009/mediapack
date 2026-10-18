@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { JobView } from "../api/client";
 import { countdown, money, seconds, shortHash } from "../lib/format";
+import { DemoAgentPay, useDemoAgent } from "./DemoAgentPay";
 import { Badge, Button, Card, Mono, SectionTitle } from "./ui";
 
 export function useNow(intervalMs = 1000) {
@@ -54,11 +55,25 @@ export function PaymentStateBadge({ job }: { job: JobView }) {
   return <Badge tone="neutral">Unpaid</Badge>;
 }
 
-export function QuotePanel({ job, onNewQuote, busy }: { job: JobView; onNewQuote: () => void; busy?: boolean }) {
+export function QuotePanel({
+  job,
+  onNewQuote,
+  busy,
+  onPaid,
+}: {
+  job: JobView;
+  onNewQuote: () => void;
+  busy?: boolean;
+  /** Called once the demo agent's payment is accepted, so the page can re-read the job without waiting for its next poll. */
+  onPaid?: () => void;
+}) {
   const now = useNow();
   const q = job.quote;
   const cd = countdown(q.expires_at, now);
-  const expired = cd.expired && job.payment_state === "unpaid";
+  const demo = useDemoAgent(job, now, onPaid);
+  // A payment attempt owns the panel until the server answers; its QUOTE_EXPIRED is authoritative even if this clock disagrees.
+  const settling = demo.phase !== "idle";
+  const expired = job.payment_state === "unpaid" && !settling && (cd.expired || demo.failure?.kind === "expired");
   const cmds = payCommands(job);
   const [tab, setTab] = useState<"mppx" | "link">("mppx");
   return (
@@ -88,9 +103,9 @@ export function QuotePanel({ job, onNewQuote, busy }: { job: JobView; onNewQuote
         <li><Badge>{q.limits.text_chars.toLocaleString()} chars of evidence text</Badge></li>
       </ul>
 
-      {job.payment_state === "unpaid" && (
+      {job.payment_state === "unpaid" && !settling && (
         <p className={`mt-3 text-sm ${expired ? "font-medium text-danger" : "text-muted"}`} role="timer">
-          {expired ? "Quote expired. Nothing was charged." : `Quote expires ${new Date(q.expires_at).toLocaleTimeString()} · ${cd.text}`}
+          {expired ? "This quote expired. Request a fresh quote to continue." : `Quote expires ${new Date(q.expires_at).toLocaleTimeString()} · ${cd.text}`}
         </p>
       )}
 
@@ -112,6 +127,17 @@ export function QuotePanel({ job, onNewQuote, busy }: { job: JobView; onNewQuote
 
       {job.payment_state === "unpaid" && !expired && (
         <div className="mt-4">
+          {(demo.offered || settling) && (
+            <>
+              <DemoAgentPay agent={demo} />
+              {!settling && <div className="my-4 flex items-center gap-3">
+                <span aria-hidden="true" className="h-px flex-1 bg-line" />
+                <h3 className="text-xs font-medium text-muted">Or pay from your own agent</h3>
+                <span aria-hidden="true" className="h-px flex-1 bg-line" />
+              </div>}
+            </>
+          )}
+          {!settling && <>
           <div role="tablist" aria-label="Payment method" className="inline-flex rounded-lg bg-line p-0.5">
             {([["mppx", "Sandbox buyer (default)"], ["link", "Link agent wallet"]] as const).map(([id, label]) => (
               <button
@@ -149,8 +175,13 @@ export function QuotePanel({ job, onNewQuote, busy }: { job: JobView; onNewQuote
                 </p>
               </div>
             )}
-            <p className="mt-2 text-xs text-muted">This page does not pay. It updates when Stripe confirms.</p>
+            <p className="mt-2 text-xs text-muted">
+              {demo.offered
+                ? "The command pays from your terminal; this page updates when Stripe confirms."
+                : "This page does not pay. It updates when Stripe confirms."}
+            </p>
           </div>
+          </>}
         </div>
       )}
 

@@ -9,6 +9,8 @@ export class ApiError extends Error {
   retryAfter?: number;
   nextAction?: string;
   jobId?: string;
+  /** True when the response had no canonical JSON error envelope, such as a proxy or gateway page. */
+  unstructured?: boolean;
   constructor(status: number, code: string, message: string, extra: Partial<ApiError> = {}) {
     super(message);
     this.status = status;
@@ -17,14 +19,23 @@ export class ApiError extends Error {
     this.retryAfter = extra.retryAfter;
     this.nextAction = extra.nextAction;
     this.jobId = extra.jobId;
+    this.unstructured = extra.unstructured;
   }
 }
 
 const TIMEOUT_MS = 30_000;
+/** Allow the server's bounded token issuance and merchant submission to finish before the browser times out. */
+const DEMO_PURCHASE_TIMEOUT_MS = 90_000;
 
-export async function api<T>(method: string, path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
+export async function api<T>(
+  method: string,
+  path: string,
+  body?: unknown,
+  signal?: AbortSignal,
+  timeoutMs = TIMEOUT_MS,
+): Promise<T> {
   const ctl = new AbortController();
-  const timer = setTimeout(() => ctl.abort(), TIMEOUT_MS);
+  const timer = setTimeout(() => ctl.abort(), timeoutMs);
   const abort = () => ctl.abort();
   if (signal?.aborted) abort();
   else signal?.addEventListener("abort", abort, { once: true });
@@ -66,7 +77,7 @@ export async function api<T>(method: string, path: string, body?: unknown, signa
         jobId: e.job_id,
       });
     }
-    throw new ApiError(res.status, res.status === 401 ? "UNAUTHORIZED" : "INTERNAL", `Request failed (${res.status}).`);
+    throw new ApiError(res.status, res.status === 401 ? "UNAUTHORIZED" : "INTERNAL", `Request failed (${res.status}).`, { unstructured: true });
   }
   return json as T;
 }
@@ -93,6 +104,12 @@ export interface AccessUrl {
   url: string;
   expires_at: string;
 }
+/** GET /viewer/me. `demo_buyer` is true only when this deployment enables the server-side demo agent (Stripe test mode); absent means false. */
+export interface ViewerMe {
+  authenticated: boolean;
+  client_id?: string;
+  demo_buyer?: boolean;
+}
 /** GET /v1/jobs/:id/pack — server-assembled manifest. Fields beyond `artifacts` are rendered generically. */
 export interface PackView {
   job_id?: string;
@@ -106,6 +123,10 @@ export interface PackView {
 export const Api = {
   bootstrap: () => api<unknown>("POST", "/viewer/bootstrap"),
   pair: (code: string) => api<unknown>("POST", "/viewer/session", { code }),
+  me: (signal?: AbortSignal) => api<ViewerMe>("GET", "/viewer/me", undefined, signal),
+  /** The server's demo agent answers the HTTP 402 challenge for this browser session. Resolves with the job once paid or reconciling. */
+  demoPurchase: (jobId: string, signal?: AbortSignal) =>
+    api<JobView>("POST", `/viewer/jobs/${jobId}/demo-purchase`, {}, signal, DEMO_PURCHASE_TIMEOUT_MS),
   videos: async () => (await api<{ videos: VideoView[] }>("GET", "/v1/videos")).videos,
   video: (id: string, signal?: AbortSignal) => api<VideoView>("GET", `/v1/videos/${id}`, undefined, signal),
   createVideo: (b: { request_id: string; file_name: string; size_bytes: number; content_type: string }) =>

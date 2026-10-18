@@ -2,6 +2,33 @@
 
 This file distinguishes actual provider verification from local fixtures. The newest cloud record comes first; older sections retain the historical results and account blockers that existed at their recorded dates.
 
+## Browser demo-agent payment, r12 (2026-10-18 UTC)
+
+Deployed Next.js image `sandbox/mediapack-web:b42acfca444b6cf333f55` to `mediapack-web-r12`, preserving `https://mediapack-mediapack.preview.bl.run`. Ready logs, database health, all provider settings, `keepAlive: false` and the 24-hour idle-delete policy were verified. Applied checksummed migration `0003_demo_buyer.sql` to the existing Supabase Free project; the private 50 MiB bucket was reused.
+
+An explicitly opted-in run of `RUN_DEMO_PAY=1 MEDIAPACK_URL=https://mediapack-mediapack.preview.bl.run node demo-video/capture/e2e-live.mjs --demo-only` used a fresh browser owner and the actual **Pay $0.50 with demo agent (test mode)** button. The complete check passed in **75.907 seconds**:
+
+| Step | Observed time |
+| --- | --- |
+| Fresh upload and browser session | 2.282 s |
+| Server media verification | 4.182 s |
+| Quote | 0.811 s |
+| Browser demo-agent payment | 2.216 s |
+| Indexing to ready | 25.618 s |
+| Cited search | 12.521 s |
+| Two source frames | 12.826 s |
+| Source clip | 8.382 s |
+
+The answer stated that the timeout was saved as **60 seconds** and reverted to **30 seconds after reload**, with a supported 34–48 s citation. The exported 42 s and 47 s frames visibly show 60 and 30 respectively. Both loaded at 1280×800. The eight-second H.264 clip covers 40–48 s, loaded and decoded in the browser, and passed a complete ffmpeg decode. All three downloads matched the recorded SHA-256, source hash, MIME type and requested timestamps.
+
+Repeating the same quote's demo-purchase request preserved the PaymentIntent, allowance and operation count. Reload preserved the paid job and single index. The desktop document fit 1280 px and the mobile document fit 375 px. No page errors occurred; no owner capability or Stripe secret was exposed to browser JSON or storage, and the session cookie remained HttpOnly.
+
+Independent provider and SQL verification passed **12/12** checks: one succeeded payment attempt, one succeeded USD 0.50 **test** PaymentIntent, matching job/quote/terms/attempt metadata, one succeeded demo reservation, one verified-payment event, one successful index with a real Blaxel sandbox, a sent Primitive index request, and a 24-hour entitlement. Manufact health, MCP initialization, all nine tools and a caller-owned persisted `get_job` read also passed without spending allowance.
+
+Local validation passed **99 backend tests**, **30 web tests**, **6 CLI buyer tests**, **17 setup tests**, **42 existing SQL invariants** and **8 new database tests**, plus lint, TypeScript and local/remote Next.js production builds. Database race tests used independent PostgreSQL sessions; provider-edge integration tests used local Stripe HTTP fixtures. The cloud browser proof used the real providers.
+
+Limits are atomic rolling-24-hour reservations, capped at two per browser owner and 100 globally. Failed or uncertain attempts stay consumed across restarts. These cap demo starts and do not guarantee a dollar spending limit. Private evidence is in ignored `.blaxel/demo-buyer-proof.json`, `.blaxel/demo-buyer-ledger-proof.json`, browser state and exported artifacts; credentials and signed URLs are excluded from the public record.
+
 ## Live end-to-end browser check, r11 (2026-10-18 UTC)
 
 `demo-video/capture/e2e-live.mjs` drove the public URL from a fresh Chrome profile and passed **26/26** checks:

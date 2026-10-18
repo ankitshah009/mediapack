@@ -22,11 +22,13 @@ The email thread shown is real: it was fetched from Primitive's API.
 cd demo-video
 npm ci
 npm run voice    # Kokoro-82M neural voice (local); writes public/audio/*.wav, src/timeline.json, src/beats.json
+npm run bake     # footage segments at their on-screen speed, all-intra, 1x playback in Remotion
 npm run render   # Remotion -> out/mediapack-demo.mp4
 npm run images   # README architecture and job-flow images
 ```
 
 - **Narration:** Kokoro-82M (`af_heart`), run locally through kokoro-js. The model file comes from the kokoro-onnx GitHub release, as noted in `tts.mjs`.
 - **Music bed:** GarageBand's royalty-free "Afloat" Apple Loops.
+- **Rendering browser:** use Remotion's own chrome-headless-shell, or set `REMOTION_BROWSER` to a chrome-headless-shell binary. Full Google Chrome in new-headless mode intermittently returned tiled, corrupted frames under parallel rendering.
 - **Timing:** scene lengths follow the narration, and every visual beat is keyed to sentence start times in `src/beats.json`.
 - **Your own voice:** record one WAV per line in `src/script.json`, save it as `public/audio/<id>.wav`, update `src/timeline.json` and `src/beats.json`, then render.

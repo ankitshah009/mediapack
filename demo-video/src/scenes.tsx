@@ -2,8 +2,9 @@ import type { CSSProperties, ReactNode } from "react";
 import { AbsoluteFill, Img, Sequence, interpolate, staticFile, useCurrentFrame } from "remotion";
 import { Architecture, type NodeId } from "./Architecture";
 import { C, mono, sans } from "./theme";
+import baked from "./baked.json";
 import { at, sec } from "./timing";
-import { Backdrop, Browser, Captions, Footage, Hi, Kicker, Logo, ease, useIn } from "./ui";
+import { Backdrop, Browser, Captions, FadeOut, Footage, Hi, Kicker, Logo, ease, useIn } from "./ui";
 
 type P = { frames: number };
 const clamp = { extrapolateLeft: "clamp", extrapolateRight: "clamp" } as const;
@@ -171,17 +172,9 @@ function Stamp({ delay, children }: { delay: number; children: ReactNode }) {
 }
 export function Pay({ frames }: P) {
   const split = at("pay", 2);
-  const uploadRate = 25.5 / ((split - 4) / 30);
+  const uploadRate = baked.payUpload.rate; // speed baked into the clip by bake.mjs
   return (
     <Backdrop>
-      <Sequence durationInFrames={split}>
-        <SpeedTag>{uploadRate.toFixed(1)}× · LIVE SITE</SpeedTag>
-        <Browser url="/app" w={1600} style={{ left: 160, top: 50 }}>
-          <Footage src="upload.mp4" rate={uploadRate} w={1600} h={900}
-            cam={[{ at: 0, x: 960, y: 540, s: 1 }, { at: split - 46, x: 960, y: 540, s: 1 }, { at: split - 14, x: 760, y: 360, s: 1.4 }]} />
-        </Browser>
-        <Captions items={[[6, at("pay", 1), "Upload a recording"], [at("pay", 1) + 2, split, <>Server verifies the real file → <Hi>$0.50</Hi> quote</>]]} />
-      </Sequence>
       <Sequence from={split}>
         <div style={{ position: "absolute", left: 100, top: 90, width: 900 }}>
           <Kicker color={C.stripe}>Agent ⇄ MediaPack · HTTP 402 · Stripe MPP</Kicker>
@@ -201,6 +194,16 @@ export function Pay({ frames }: P) {
           <Stamp delay={at("pay", 5) - split}>No API key</Stamp>
           <Stamp delay={at("pay", 6) - split}>No checkout</Stamp>
         </div>
+      </Sequence>
+      <Sequence durationInFrames={split + 10}>
+        <FadeOut start={split}>
+        <SpeedTag>{uploadRate.toFixed(1)}× · LIVE SITE</SpeedTag>
+        <Browser url="/app" w={1600} style={{ left: 160, top: 50 }}>
+          <Footage src={`baked/${baked.payUpload.file}`} w={1600} h={900}
+            cam={[{ at: 0, x: 960, y: 540, s: 1 }, { at: split - 46, x: 960, y: 540, s: 1 }, { at: split - 14, x: 760, y: 360, s: 1.4 }]} />
+        </Browser>
+        <Captions items={[[6, at("pay", 1), "Upload a recording"], [at("pay", 1) + 2, split, <>Server verifies the real file → <Hi>$0.50</Hi> quote</>]]} />
+        </FadeOut>
       </Sequence>
       <div style={{ display: "none" }}>{frames}</div>
     </Backdrop>
@@ -277,14 +280,14 @@ export function Primitive(_: P) {
 // 6 ─ Live search on the sample talk (real run; footage starts just before the CLI call)
 export function Live({ frames }: P) {
   const f = useCurrentFrame();
-  const RATE = 1.4, TRIM_S = 1.2, SPAWN_S = 1.5, DONE_S = 9.8;
+  const RATE = baked.live.rate, TRIM_S = baked.live.trim, SPAWN_S = 1.5, DONE_S = 9.8;
   const elapsed = Math.max(0, TRIM_S + (f / 30) * RATE - SPAWN_S);
   const done = elapsed >= DONE_S;
   return (
     <Backdrop>
       <SpeedTag>LIVE RUN · {RATE}× · sample talk</SpeedTag>
       <Browser url="/app/jobs/d5df3fe7…" w={1600} style={{ left: 160, top: 50 }}>
-        <Footage src="live.mp4" rate={RATE} from={Math.round(TRIM_S * 30)} w={1600} h={900} cam={[{ at: 0, x: 700, y: 800, s: 1.72 }]} />
+        <Footage src={`baked/${baked.live.file}`} w={1600} h={900} cam={[{ at: 0, x: 700, y: 800, s: 1.72 }]} />
         <div style={{ position: "absolute", right: 26, top: 22, fontFamily: mono, fontSize: 34, fontWeight: 700, padding: "10px 20px", borderRadius: 14,
           background: done ? C.lime : "rgba(10,10,11,.85)", color: done ? C.limeInk : C.text }}>
           {done ? `✓ answered in ${DONE_S} s` : `⏱ ${elapsed.toFixed(1)} s`}
@@ -301,24 +304,26 @@ export function Live({ frames }: P) {
 // 7 ─ The bug recording: cited answer, then the evidence
 export function Bug({ frames }: P) {
   const split = at("bug", 2);
-  const ra = 16.4 / ((split - 4) / 30), re = 13.1 / ((frames - split - 4) / 30);
+  const ra = baked.bugAnswer.rate, re = baked.bugEvidence.rate;
   const k = (footageS: number) => Math.round((footageS / ra) * 30);
   return (
     <Backdrop>
-      <Sequence durationInFrames={split}>
+      <Sequence from={split}>
+        <SpeedTag>{re.toFixed(1)}× · LIVE SITE</SpeedTag>
+        <Browser url="/app/jobs/bb641bda…" w={1600} style={{ left: 160, top: 50 }} enter={false}>
+          <Footage src={`baked/${baked.bugEvidence.file}`} w={1600} h={900} cam={[{ at: 0, x: 740, y: 420, s: 1.25 }, { at: 50, x: 740, y: 640, s: 1.2 }]} />
+        </Browser>
+        <Captions items={[[4, frames - split, <>Only the cited frames & clips · each <Hi>SHA-256</Hi> verified</>]]} />
+      </Sequence>
+      <Sequence durationInFrames={split + 10}>
+        <FadeOut start={split}>
         <SpeedTag>{ra.toFixed(1)}× · LIVE SITE</SpeedTag>
         <Browser url="/app/jobs/bb641bda…" w={1600} style={{ left: 160, top: 50 }}>
-          <Footage src="answer.mp4" rate={ra} w={1600} h={900}
+          <Footage src={`baked/${baked.bugAnswer.file}`} w={1600} h={900}
             cam={[{ at: 0, x: 740, y: 545, s: 1.4 }, { at: k(4.9), x: 740, y: 545, s: 1.4 }, { at: k(6.9), x: 723, y: 580, s: 1.3 }]} />
         </Browser>
         <Captions items={[[6, at("bug", 1), "Bug recording: what changes after reload?"], [at("bug", 1) + 2, split, <>Saved as <Hi>60</Hi> → shows <Hi color={C.danger}>30</Hi> · cited <Hi>0:40–0:48</Hi></>]]} />
-      </Sequence>
-      <Sequence from={split}>
-        <SpeedTag>{re.toFixed(1)}× · LIVE SITE</SpeedTag>
-        <Browser url="/app/jobs/bb641bda…" w={1600} style={{ left: 160, top: 50 }} delay={0}>
-          <Footage src="evidence.mp4" rate={re} w={1600} h={900} cam={[{ at: 0, x: 740, y: 420, s: 1.25 }, { at: 50, x: 740, y: 640, s: 1.2 }]} />
-        </Browser>
-        <Captions items={[[4, frames - split, <>Only the cited frames & clips · each <Hi>SHA-256</Hi> verified</>]]} />
+        </FadeOut>
       </Sequence>
     </Backdrop>
   );

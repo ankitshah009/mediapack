@@ -12,11 +12,9 @@ Current runtime: [dashboard](https://mediapack-mediapack.preview.bl.run/app) · 
 
 ## Efficiency and video memory
 
-The source-linked timeline, index and exported evidence persist in Supabase, so another question can reuse inspected material after its disposable 4 GB worker exits. Primitive carries signed work-request/result messages with stable identities; SQL deduplication, leases and recovery make that transport reliable across process boundaries.
+Index the video once, keep its timestamped visual and speech evidence, and reuse that memory for follow-up questions. Supabase stores the evidence; Primitive keeps requests and results connected across disposable Blaxel workers.
 
-In the historical October 18 `gpt-4o-mini` talk run, before the longer temporal-search instructions were added, the 23-frame vision pass used 326,710 input tokens and the first search over 32 stored records used 2,507: **324,203 fewer input tokens** for that search: **99.23% lower incremental input**, about **130× smaller**, than repeating that same full pass. The first question still pays for indexing. Assuming the same search size for three questions gives 334,231 versus 980,130 input tokens, **645,899 avoided input tokens**, a **65.90% counterfactual reduction**, not a competing-product or NVIDIA benchmark. Output, provider caching and subsequently retrieved media are excluded. The three-search pack and 24-hour access window still apply; the historical 2,507-token search is not a fixed count for the final instructions.
-
-In the project team's initial hands-on evaluation, Primitive was slightly more responsive than Inkbox; this is qualitative, with no controlled benchmark or Inkbox adapter in this repository. See [efficiency, memory and transport](docs/efficiency-and-memory.md) for the definitions, calculations, limits, Primitive's role, and NVIDIA VSS's existing vector/graph retrieval memory.
+See [efficiency in numbers](#efficiency-in-numbers) for measured token inputs, the three-question projection, CPU transcription timings and idle-cost controls.
 
 ## How it works
 
@@ -255,44 +253,50 @@ Open the printed `/app/pair` URL and paste the one-time code. The browser receiv
 
 ## Worker image and recovery
 
-The root `Dockerfile` points to `apps/web/Dockerfile`. It builds Next.js with standalone output and includes the shared service dependencies; no provider secret is copied into the image. Build from the repository root:
+### Deploy Next.js on Blaxel
+
+The root `Dockerfile` builds `apps/web` with standalone output and the shared backend. Provider secrets are supplied at runtime. For a local container:
 
 ```sh
 docker build -t mediapack-web:local .
 docker run --rm --env-file apps/web/.env.local -p 3000:3000 mediapack-web:local
 ```
 
-`blaxel.toml` uses a Blaxel **sandbox with a public preview** on port 3000. The image contains the compiled standalone Next.js server and Blaxel's sandbox API; local Docker runs serve Next.js directly, while `MEDIAPACK_HOST_MODE=sandbox` starts the process API. The hosting script launches and supervises the same production server through that API. See the [official preview guide](https://docs.blaxel.ai/Sandboxes/Preview-url). Ownership tokens and webhook signatures protect private operations. Application Runtime is private preview and was rejected by the current workspace; sandbox previews avoid that entitlement gate.
+The verified hosting path uses Blaxel's remote builder and a public sandbox preview on port 3000. The image includes Blaxel's sandbox API, which supervises the same compiled Next.js server. Application Runtime remains a separate private-preview feature; see the [preview guide](https://docs.blaxel.ai/Sandboxes/Preview-url).
 
-The official CLI was installed with release checksum verification only in `/tmp/mediapack-blaxel-bin`, with setup, skills, shell PATH changes and completions disabled. The user has confirmed existing workspace credits; no new plan is required. This CLI builds remotely, so the full local Colima disk does not block a credited remote build. First run the local-only preflight:
+First check packaging locally, then build and deploy from the repository root:
 
 ```sh
 node scripts/deploy-blaxel.mjs
-```
-
-It probes the installed flags and checks the exact source archives while suppressing raw resolved configuration. Root and worker `.blaxelignore` files exclude environment files, private tooling state, dependencies, build caches, documents and source media before cloud upload. `.dockerignore` alone does not govern the Blaxel source archive.
-
-After authenticating the authorized `mediapack` workspace, build remotely, then use the immutable tag returned by the builder:
-
-```sh
 /tmp/mediapack-blaxel-bin/bl push --workspace mediapack --type sandbox --name mediapack-web --yes --timeout 20m
 node scripts/host-blaxel.mjs --image sandbox/mediapack-web:<built-immutable-tag> --name <new-sandbox-name> --env-file apps/web/.env.blaxel \
   --idle-ttl 24h --stable-prefix mediapack --move-from <previous-sandbox-name>
 ```
 
-Use native `bl login` credentials or securely supplied `BL_API_KEY`/`BL_WORKSPACE`. The hosting script reads server values privately from the selected env file, sets runtime `PUBLIC_BASE_URL` to the actual preview origin, and verifies the running Next.js process plus public `/health`. Its report under ignored `.blaxel/web-host.json` includes missing provider setting names without their values. An existing running process is reused; add `--restart` to apply edited environment values. For a new image use a new `--name` (for example `mediapack-web-r10`) so a working deployment is retained. With `--stable-prefix NAME`, `PUBLIC_BASE_URL` is `https://NAME-<workspace>.preview.bl.run`; the script starts the new process, checks its per-release preview, and only then moves the stable preview off the `--move-from` sandbox, so callbacks and the MCP proxy keep one origin across releases.
+Use native `bl login` or securely supplied Blaxel credentials. The preflight probes installed CLI flags and checks that archives exclude secrets, private tooling state, dependencies, caches and source media. The remote build avoids the local Colima disk limit recorded in [verification](docs/verification.md).
 
-The current deployment is `mediapack-web-r11`, serving [the dashboard](https://mediapack-mediapack.preview.bl.run/app) from image `sandbox/mediapack-web:b30eaad65e240fa7494ff`. Its compiled launcher requests 4 GB workers using `sandbox/mediapack-worker:be53b19cc608a18554956`. Readiness, database OK, no missing provider settings, `keepAlive: false` and the 24-hour deletion policy were verified. To restart this same deployment after editing its private environment while retaining the judging window:
+The hosting helper reads the private env file, sets `PUBLIC_BASE_URL`, and verifies Next.js readiness and database health. Use a new sandbox name for each image. With `--stable-prefix mediapack`, it checks the new release before moving the stable preview, preserving one origin for Stripe, Primitive, recovery and Manufact.
+
+| Current deployment | Configuration |
+| --- | --- |
+| Dashboard | [mediapack-mediapack.preview.bl.run/app](https://mediapack-mediapack.preview.bl.run/app) |
+| Web sandbox | `mediapack-web-r11` · 2048 MiB |
+| Web image | `sandbox/mediapack-web:b30eaad65e240fa7494ff` |
+| Worker image | `sandbox/mediapack-worker:be53b19cc608a18554956` · 4096 MiB |
+| MCP endpoint | [Manufact MCP](https://fast-wave-awovc.run.mcp-use.com/mcp) |
+| Judging lifecycle | Standby enabled · 24-hour idle-delete policy |
+
+To apply edited private settings to the current web deployment:
 
 ```sh
 node scripts/host-blaxel.mjs --image sandbox/mediapack-web:b30eaad65e240fa7494ff --name mediapack-web-r11 --env-file apps/web/.env.blaxel --idle-ttl 24h --stable-prefix mediapack --restart
 ```
 
-Cost protection: the web process uses `keepAlive: false`, allowing automatic standby when connections end. The hosting helper defaults to `ttl-idle: 1h`; the current judging deployment explicitly uses `--idle-ttl 24h`, with a read-back `ttl-idle: 24h` delete policy. The launch omits process `timeout` and `waitForPorts`; readiness is checked separately. Despite SDK/documentation comments describing startup-only timeouts without keep-alive, the current sandbox-api implementation kills a process when an explicit timeout expires. The hosting script enforces the deletion policy on reused sandboxes and restarts any old keep-alive process. See [Blaxel expiration semantics](https://docs.blaxel.ai/Sandboxes/Expiration): activity means resume/suspend transitions, so a continuously active session can also be deleted after the configured interval. Deletion removes the sandbox and preview; rerun the host script and update external callback/Manufact URLs if the origin changes. Standby has no active compute charge, but snapshot storage is billed until deletion and retained images have a separate storage charge. This is not an account spending cap. The bounded worker process still uses keep-alive to finish its work, with a maximum 10-minute execution and 30-minute sandbox lifetime. Sandbox hosting does not provide Application revisions or deployment rollbacks; the deployed idle-aware Supabase recovery schedule handles due persisted work without continually waking the host. See [cost estimates](docs/blaxel-costs.md) for the $500 credit budget.
+The MCP proxy forwards each caller's capability to the API. Keep only `MEDIAPACK_API_URL` in its environment; provider, database and worker secrets stay on the control server. See [account setup](docs/SETUP-ACCOUNTS.md) for callback configuration and [hosting details](docs/blaxel-costs.md) for lifecycle semantics.
 
-The deployed Manufact endpoint is [MediaPack MCP](https://fast-wave-awovc.run.mcp-use.com/mcp). The endpoint URL is stable. The source-specific search and evidence proof below ran through r6. The final read-only `get_job`/`get_pack` readback against the CSS-only r7 host preserved the correct search and four frame/two clip hash references, with no new operations or usage changes. All nine MCP tools were available and viewer assets returned HTTP 200. The search referenced source records `f21`/`f24` spanning 40–48 seconds. The exported 40.000-second frame shows 60 and Saved; the 46.000-second frame shows 30. The 40–48-second H.264 clip is 1280×800, decoded fully with ffmpeg exit zero, and its SHA-256 matched the recorded artifact. Client-owned capabilities are forwarded per request; the proxy does not contain the server's Stripe, Supabase or worker secrets. Use the same CLI owner for the associated evidence requests.
+### Build the media worker
 
-Build the worker from its own context; `.dockerignore` excludes local dependencies, virtual environments and build output:
+Local image checks:
 
 ```sh
 docker build -t mediapack-worker:local worker
@@ -300,7 +304,7 @@ docker run --rm mediapack-worker:local ffmpeg -version
 docker run --rm mediapack-worker:local ffprobe -version
 ```
 
-Build the reusable worker image remotely from the worker directory, then set `BLAXEL_WORKER_IMAGE` to the returned real image reference:
+Build remotely from the worker directory, then set `BLAXEL_WORKER_IMAGE` to the returned immutable image reference:
 
 ```sh
 cd worker
@@ -308,22 +312,42 @@ cd worker
 cd ..
 ```
 
-Run this from `worker/`: this CLI's `--directory worker` from the repository root archives the whole root and overlays its Dockerfile without relocating `package.json`. The worker image contains compiled code under `/app`, ffmpeg, the Blaxel sandbox API and pinned whisper.cpp **1.9.5** with the multilingual **base** model. `BL_SANDBOX_USER_ENABLED=true` scopes workloads to the unprivileged `node` user. Each operation requests **4096 MiB (4 GB)** and launches `node dist/run.js` with a scoped manifest and Primitive reply credential. Only index/search workers receive a newly minted short-lived model token; media-only work receives no model credentials. The persistent Blaxel service account, buyer wallet and Supabase service role remain outside the worker. The Next.js host uses 2048 MiB. Exit zero means a result was delivered; inspect its persisted status for processing success.
+Run the push from `worker/`; this CLI's `--directory worker` from the repository root does not relocate the build context correctly. The image packages compiled Node/TypeScript, ffmpeg/ffprobe, the sandbox API, and checksum-pinned whisper.cpp **1.9.5** with multilingual **base** weights. No model download is required on the first job.
 
-Transcription now runs locally with whisper.cpp, not the gateway's unsupported audio-transcription endpoint. The real 4 GB cloud smoke transcribed **7.618 seconds of source audio in 44.864 seconds**. That measurement is for the tested short recording, not a general indexing-latency promise; model weights and engine are packaged and checksum-pinned, with no silent external ASR fallback.
+Each operation runs as the unprivileged `node` user in a **4 GB** sandbox. Index/search workers receive a newly minted short-lived gateway token; media-only workers receive no model credential. The persistent Blaxel service account, buyer wallet and Supabase service role remain on control. Exit zero confirms result delivery; the persisted result records processing success or failure. See the [worker README](worker/README.md) for runtime and transcription details.
 
-`worker/blaxel.toml` follows the [official custom-image guide](https://docs.blaxel.ai/Sandboxes/Templates). Local container builds remain unverified because Colima ran out of space; no Docker data was pruned. Use the remote build path above, then verify the app's public `/health`, worker `ffmpeg`/`ffprobe`, sandbox API boot, and one fixed worker process. Source/config dry-runs prove packaging, not a successful cloud rollout.
+### Recover interrupted work
 
-The service attempts immediate dispatch after commits. Durable recovery is now installed in Supabase. Review or reconcile its owned schedule with:
+Immediate dispatch follows each committed operation. Supabase Cron also checks persisted work and invokes recovery only when something is due:
 
 ```sh
 node scripts/setup-recovery.mjs --plan --env-file apps/web/.env.blaxel
 node scripts/setup-recovery.mjs --apply --env-file apps/web/.env.blaxel
 ```
 
-The helper installs one private Supabase Cron job, due-work predicates, a pg_net dispatch function, a replay-nonce table, and Vault secrets for the active origin and signing key. Each due request uses a timestamp, nonce and HMAC signature; the scheduled request does not store a reusable bearer token in pg_net headers. The database makes **zero HTTP requests while idle**. An actual missed-inline-dispatch recovery completed in **34.6 seconds**. The final r7 recovery proof passed all 12 checks: fresh signed requests returned 200, replayed or tampered requests returned 401, and 300-second nonce retention was verified. During **70.493 seconds** of idle observation spanning two cron runs, the database made **zero HTTP requests**. Rerun `--apply` after changing the host origin or signing token. For an intentional one-off local/operator tick, `node --env-file=apps/web/.env.local scripts/tick.mjs` remains available; it is not the durable scheduler.
+The helper owns the due-work predicate, pg_net dispatch, replay-nonce table and Vault secrets. Scheduled calls use a timestamp, nonce and HMAC signature; reusable bearer credentials stay out of queued HTTP headers. Rerun `--apply` after changing the origin or signing key. A one-off operator tick remains available through `scripts/tick.mjs`.
+
+Observed recovery and idle results are highlighted [below](#compute-and-idle-cost-controls); the full setup and failure behavior are in the [recovery runbook](docs/recovery-scheduler.md).
 
 ## Verification
+
+| Recorded check | Result |
+| --- | --- |
+| Fresh public-browser session, r11 | **26/26 passed**: upload/session creation, validation, pairing, citations, evidence, receipt, mobile and authorization checks |
+| Fresh paid CLI run, r11 | One $0.50 test purchase; correct 60 → 30 settings answer; unrelated deletion query returned no evidence and no citations |
+| Two different source videos | Settings evidence at **40–48 s**; talk deadline evidence at **22–31.44 s** |
+| Settings acceptance, r6 | **15/15 passed**; cited frames and eight-second clip matched SHA-256; full clip decoding passed |
+| Payment and operation retries | Same PaymentIntent and entitlement; unchanged allowance; no duplicate index |
+| SQL invariants | **42 passed** on a fresh database with both migrations |
+| Worker tests | **39 passed**, including actual CPU Whisper, ffmpeg and transport |
+| Manufact MCP | Nine tools; caller-owned access; persisted results and view assets verified |
+
+These are dated results from different release checks. The [verification record](docs/verification.md) retains their exact versions, test boundaries and failed attempts. Stripe payments remain in **test mode**; public Link wallets require a genuine merchant profile.
+
+<details>
+<summary>Run the local checks</summary>
+
+Run these from the repository root with the required local dependencies installed:
 
 ```sh
 bash scripts/test-db.sh
@@ -345,4 +369,71 @@ node --check scripts/tick.mjs
 node scripts/mediapack.mjs --help
 ```
 
-See [verification status](docs/verification.md) for exercised paths and remaining account gates. The database script starts a disposable local Postgres and applies migrations/invariants. Worker tests exercise the production media path with local I/O edges; paid providers require separate credentialed verification. The paid talk-recording flow completed upload/preflight, sandbox purchase, Primitive work/result, indexing/search and evidence retrieval. The final source-specific MCP search and source evidence against r6 also passed all 15 acceptance checks. Settings evidence covers 40–48 seconds; the separate talk recording produced 22–31.44-second evidence, demonstrating source-dependent results. The final backend suite passed 65 tests and the worker suite passed 39, including actual local Whisper checks. A fresh database applying both `0001_init.sql` and `0002_worker_launch_events.sql` passed all 42 SQL invariants. R7 changes only narrow-screen status-URL wrapping. Its final read-only MCP check preserved the completed r6 results without changing operations or usage. Deployed browser checks passed at 375 and 1280 pixels for both Sandbox buyer and Link tabs, including keyboard access, current-origin commands and payment/memory disclosures; all 40 checked assets returned 200 with no browser errors. Owned Stripe and Primitive callbacks on r7 passed signature persistence and duplicate-event handling checks. The settings ledger contains one entitlement, payment attempt, PaymentIntent and index operation. Exact replays left the ledger unchanged and caused no second payment. Its delivered usage is three searches, four frames, 14 seconds of clips and 834 text characters, with zero outstanding reservations. All downloaded artifact hashes matched, and the final clip decoded completely. A subsequent normal frame launch automatically reaped the completed search worker from standby to terminated. Preserve redacted job/payment/operation/message/artifact references as the run manifest. Never describe a mock or an unexecuted provider call as a successful integration.
+The database script uses disposable local PostgreSQL. Worker tests exercise real media processing, with mocks at external I/O boundaries. Credentialed provider runs are recorded separately.
+
+</details>
+
+## Efficiency in numbers
+
+**Index once. Search the saved timeline. Retrieve the source evidence you need.**
+
+Follow-up questions reuse timestamped frame observations, visible text and speech instead of sending the full sampled video through vision again. Frames and clips are exported on demand, within the purchased allowance.
+
+### Measured token inputs
+
+One October 18, 2026 `gpt-4o-mini` talk run inspected **23 frames** and stored **32 visual/speech records**:
+
+| Stage | Reported input tokens |
+| --- | ---: |
+| Initial visual indexing | 326,710 |
+| One search over the stored index | 2,507 |
+| Difference versus repeating that same full indexing pass | **324,203 fewer · 99.23% lower** |
+
+**That search used about 130× less input than the recorded full visual pass.** The first question still pays the indexing cost: indexing plus its first search totals **329,217 input tokens**.
+
+This historical search preceded the longer temporal-grounding instructions. Its 2,507-token count is a measured example, not a fixed cost for current searches.
+
+### What reuse could save across three questions
+
+Assuming each search used the same 2,507 input tokens as that measured search:
+
+| Strategy | Total input tokens |
+| --- | ---: |
+| Repeat the same full visual pass for each question | 980,130 |
+| Index once, then search three times | 334,231 |
+| Projected reduction | **645,899 tokens · 65.90%** |
+
+This is a **projection**, not three measured searches or a competing-product benchmark. Both comparisons exclude output tokens, provider caching and media subsequently consumed by the buyer agent. Actual counts depend on the video, question and model. See the [complete calculation and assumptions](docs/efficiency-and-memory.md).
+
+### Video memory survives the worker
+
+| Component | What it preserves or does |
+| --- | --- |
+| **Supabase** | The source identity, timestamped index, private evidence, ownership, payments and allowance ledger |
+| **Primitive** | A retrievable email thread for each operation: work request, result reply, stable message identities and artifact references |
+| **Control + SQL** | Committed outbox/inbox, deduplication, leases, generation checks and result application |
+| **Blaxel worker** | Bounded media processing and model calls; committed evidence remains available after the worker exits |
+
+**Primitive keeps the work conversation connected across disposable workers.** A repeated delivery, interrupted process or late reply can be reconciled against the same persisted operation and source. Media bytes move directly through private Storage; messages carry compact envelopes and references. That separation lets agents reuse both the saved evidence and the history of how it was produced.
+
+The current pack includes three distinct searches, eight frames, 15 seconds of clips and 8,000 evidence characters for 24 hours. Memory reuse follows that access window and retention policy.
+
+### Compute and idle-cost controls
+
+| Efficiency fact | Recorded evidence or control |
+| --- | --- |
+| **Local speech transcription** | The 4 GB cloud smoke processed **44.864 s of audio in 7.618 s** with CPU Whisper and no audio API |
+| **Paid indexing execution** | Talk: **15.208 s**; settings: **21.932 s**, excluding startup and time outside the measured worker interval |
+| **Idle recovery** | **Zero HTTP requests** during a **70.493 s** observation spanning two successful cron runs |
+| **Interrupted dispatch** | A committed operation recovered through the existing schedule in **34.585 s** |
+| **Web standby** | `keepAlive: false` allows automatic standby; no active compute charge while suspended |
+| **Bounded workers** | Completed owned workers are reclaimed before later launches; a **30-minute sandbox lifetime** bounds retention |
+| **Judging host expiry** | Verified **24-hour idle-delete policy**; the helper defaults to one hour |
+
+These timings describe individual recorded runs, not a general latency guarantee. Standby and cleanup reduce active compute and retained resources; images and snapshots still have storage charges. Blaxel's idle TTL follows resume/suspend events and can expire an active sandbox, so it is not a conventional last-request timer or a spending cap. See [dated rates, the $500 budget scenarios and expiration details](docs/blaxel-costs.md).
+
+### Primitive, Inkbox and NVIDIA VSS
+
+In the team's initial hands-on evaluation, **Primitive was slightly more responsive than Inkbox**, which informed the current choice. This is qualitative: no controlled latency benchmark is recorded, and the repository currently implements the Primitive adapter.
+
+**NVIDIA VSS also provides persisted retrieval memory**, including vector/graph retrieval. MediaPack's focus is a bounded, paid agent workflow with source identity, reusable evidence, ownership and retry-safe operations. The token figures above do not establish NVIDIA performance or GPU superiority. See the [comparison and evaluation limits](docs/efficiency-and-memory.md#how-this-differs-from-nvidia-vss).

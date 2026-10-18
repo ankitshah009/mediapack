@@ -174,7 +174,7 @@ test('failed DDL rolls back schema and ledger together; bucket is never changed'
   assert.equal(f.database.endCalls, 1);
 });
 
-test('existing bucket is made private with exact MIME types and 100 MiB limit', async t => {
+test('existing bucket is made private with exact MIME types and 50 MiB limit', async t => {
   const f = await fixture(t, { bucket: { id: BUCKET, public: true, file_size_limit: 52428800, allowed_mime_types: ['*/*'] } });
   const plan = await setupSupabase(f.options);
   assert.equal(plan.bucket_action, 'update');
@@ -186,11 +186,11 @@ test('existing bucket is made private with exact MIME types and 100 MiB limit', 
 });
 
 test('bucket readback refuses provider downgrade and leaves successful migrations tracked', async t => {
-  const f = await fixture(t, { mutateReadback: row => ({ ...row, file_size_limit: 52428800 }) });
+  const f = await fixture(t, { mutateReadback: row => ({ ...row, file_size_limit: 25 * 1024 ** 2 }) });
   await assert.rejects(setupSupabase({ ...f.options, apply: true }), error => {
     assert.equal(error.code, 'storage_configuration_failed');
-    assert.match(error.next_action, /104857600/);
-    assert.match(error.next_action, /50 MB/);
+    assert.match(error.next_action, /52428800/);
+    assert.match(error.next_action, /50 MiB/);
     return true;
   });
   assert.equal(f.database.state.applied.length, 1);

@@ -3,7 +3,7 @@ Use MediaPack to inspect the provided video and answer the provided question wit
 The operator must provide these values before starting:
 
 - `MEDIAPACK_URL`: the real public HTTPS Next.js API URL hosted on Blaxel.
-- A local MP4/WebM recording, at most 100 MiB and 180 seconds.
+- A local MP4/WebM recording, at most 50 MiB and 180 seconds.
 - An arbitrary question about visible actions or spoken content, without supplying the answer's timestamps.
 - A private owner configuration path if the default CLI configuration is unsuitable.
 - Explicit authorization for one USD 0.50 Stripe sandbox purchase and an authenticated sandbox buyer, if proceeding past the quote. A budget in this prompt does not configure a Link wallet approval policy.

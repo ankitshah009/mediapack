@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { afterEach, test } from "node:test";
 import { Api, ApiError, api } from "./client.ts";
+import { preflight } from "../lib/limits.ts";
 const VIDEOS = [{
   video_id: "00000000-0000-4000-8000-000000000001", file_name: "uploaded.mp4", state: "ready",
   size_bytes: 1200, sha256: "a".repeat(64), duration_ms: 10000, width: 1280, height: 720,
@@ -9,6 +10,12 @@ const VIDEOS = [{
 
 const realFetch = globalThis.fetch;
 afterEach(() => { globalThis.fetch = realFetch; });
+
+test("browser preflight accepts 50 MiB and rejects one extra byte before upload", () => {
+  const file = (size: number) => ({ size, type: "video/mp4" }) as File;
+  assert.equal(preflight(file(50 * 1024 ** 2)), null);
+  assert.match(preflight(file(50 * 1024 ** 2 + 1))!, /the limit is 50 MB/);
+});
 
 test("video list unwraps the REST envelope, including an empty account", async () => {
   for (const videos of [VIDEOS, []]) {

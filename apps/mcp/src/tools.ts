@@ -6,7 +6,7 @@ import { ApiError, createApi, localError, type ApiOptions, type JsonObject, type
 const RequestId = z.string().uuid().optional().describe("Caller-generated UUID; reuse it for retries. Omitted operation IDs are derived from the inputs. Supply this for create_video to make a lost-response retry safe.");
 const Id = z.string().uuid();
 const schemas = {
-  create_video: z.object({ file_name: z.string().min(1).max(200), size_bytes: z.number().int().positive().max(100 * 1024 * 1024), content_type: z.enum(["video/mp4", "video/webm"]), request_id: RequestId }),
+  create_video: z.object({ file_name: z.string().min(1).max(200), size_bytes: z.number().int().positive().max(50 * 1024 * 1024), content_type: z.enum(["video/mp4", "video/webm"]), request_id: RequestId }),
   complete_upload: z.object({ video_id: Id, request_id: RequestId }),
   get_video: z.object({ video_id: Id }),
   quote_video: z.object({ video_id: Id, request_id: RequestId }),
@@ -28,7 +28,7 @@ export function uuidFrom(...parts: string[]): string {
 }
 
 const specs: Record<ToolName, { description: string; readOnly: boolean }> = {
-  create_video: { description: "Reserve an MP4/WebM upload, at most 100 MiB and 180 s. PUT the raw bytes to upload.url with upload.headers, then call complete_upload. Supply request_id for safe create retries.", readOnly: false },
+  create_video: { description: "Reserve an MP4/WebM upload, at most 50 MiB and 180 s. PUT the raw bytes to upload.url with upload.headers, then call complete_upload. Supply request_id for safe create retries.", readOnly: false },
   complete_upload: { description: "Confirm the signed upload PUT finished; queues the probe. Poll get_video until ready.", readOnly: false },
   get_video: { description: "Read a video's upload/probe state and verified metadata.", readOnly: true },
   quote_video: { description: "Freeze a ready video's test-mode price, allowances and pending job. Follow the returned purchase URL over HTTP; this tool never makes a payment.", readOnly: false },

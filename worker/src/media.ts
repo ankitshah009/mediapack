@@ -141,7 +141,7 @@ export async function sampleFrames(path: string, outDir: string, o: { intervalMs
 export async function extractFrameAt(path: string, ms: number, outFile: string, _fps: number, timeoutMs = 30_000, signal?: AbortSignal, sourceStartS = 0): Promise<{ actualMs: number }> {
   if (!Number.isInteger(ms) || ms < 0) throw new Error("timestamp must be a non-negative integer");
   // Packet timestamps avoid decoding the whole video and do not assume average FPS is
-  // the local frame spacing. Sources are already bounded to 100 MiB / 180 seconds.
+  // the local frame spacing. Sources are already bounded to 50 MiB / 180 seconds.
   const packets = await runOk(FFPROBE, ["-v", "error", "-select_streams", "v:0", "-show_entries", "packet=pts_time", "-of", "csv=p=0", path], { timeoutMs, signal });
   const pts = packets.stdout.split("\n").map((line) => line.trim().replace(/,$/, ""))
     .filter((line) => line && line !== "N/A").map(Number).filter(Number.isFinite).sort((a, b) => a - b);

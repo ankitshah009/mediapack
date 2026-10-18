@@ -10,7 +10,7 @@ import { createHash } from 'node:crypto';
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const require = createRequire(resolve(ROOT, 'apps/mediapack/package.json'));
 export const BUCKET = 'mediapack-private';
-export const BUCKET_OPTIONS = Object.freeze({ public: false, fileSizeLimit: 104857600,
+export const BUCKET_OPTIONS = Object.freeze({ public: false, fileSizeLimit: 52428800,
   allowedMimeTypes: Object.freeze(['video/mp4', 'video/webm', 'image/jpeg', 'application/json']) });
 const LOCK = 1297109843;
 
@@ -117,8 +117,8 @@ function bucketMatches(data) {
     BUCKET_OPTIONS.allowedMimeTypes.every(type => data.allowed_mime_types.includes(type));
 }
 function storageFailure() {
-  fail('storage_configuration_failed', 'The required private 100 MiB bucket could not be configured or verified.',
-    'Check SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY. Ensure the project global upload limit permits 104857600 bytes; Free projects may cap uploads at 50 MB. No smaller limit is substituted.');
+  fail('storage_configuration_failed', 'The required private 50 MiB bucket could not be configured or verified.',
+    'Check SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY. Ensure the project global upload limit permits 52428800 bytes (50 MiB). No smaller limit is substituted.');
 }
 async function inspectBucket(storage) {
   const { data, error } = await storage.getBucket(BUCKET);
@@ -199,8 +199,8 @@ export async function setupSupabase({ rootDir = ROOT, envFile = 'apps/web/.env.b
       required_bucket_file_size_limit_bytes: BUCKET_OPTIONS.fileSizeLimit,
       required_bucket_allowed_mime_types: [...BUCKET_OPTIONS.allowedMimeTypes], bucket_configuration_verified: apply || bucketMatches(bucket),
       global_upload_limit_verified: false,
-      next_action: apply ? 'Verify the project global upload limit is at least 104857600 bytes, restart the hosted app with these private settings, and exercise session creation and upload.'
-        : 'Review the pending migration and bucket settings, then run --apply. The project global upload limit must permit 104857600 bytes.' };
+      next_action: apply ? 'Verify the project global upload limit is at least 52428800 bytes, restart the hosted app with these private settings, and exercise session creation and upload.'
+        : 'Review the pending migration and bucket settings, then run --apply. The project global upload limit must permit 52428800 bytes.' };
   } catch (error) {
     if (error instanceof SetupError) throw error;
     fail(controller.signal.aborted ? 'setup_timeout' : 'supabase_setup_failed',
@@ -218,7 +218,7 @@ async function main() {
     'env-file': { type: 'string', default: 'apps/web/.env.blaxel' }, help: { type: 'boolean', short: 'h' } } })); }
   catch { fail('invalid_options', 'Unsupported or incomplete setup options.', 'Run node scripts/setup-supabase.mjs --help.'); }
   if (values.help) {
-    console.log('Usage: node scripts/setup-supabase.mjs [--plan | --apply] [--env-file PATH]\nDefault --plan is read-only. --apply initializes the existing database using atomic checksummed migrations, then configures the private 100 MiB mediapack-private bucket. Requires DATABASE_URL, SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in the private env file. Never creates an account, changes a billing plan, or substitutes a smaller upload limit.');
+    console.log('Usage: node scripts/setup-supabase.mjs [--plan | --apply] [--env-file PATH]\nDefault --plan is read-only. --apply initializes the existing database using atomic checksummed migrations, then configures the private 50 MiB mediapack-private bucket for Supabase Free. Requires DATABASE_URL, SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in the private env file. Never creates an account, changes a billing plan, or substitutes a smaller upload limit.');
     return;
   }
   if (values.plan && values.apply) fail('invalid_options', 'Choose either --plan or --apply.', 'Use --plan to inspect or --apply to initialize the provisioned backend.');

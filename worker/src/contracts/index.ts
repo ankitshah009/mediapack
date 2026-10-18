@@ -15,7 +15,7 @@ export const PACK = {
 } as const;
 
 export const INPUT_LIMITS = {
-  maxBytes: 100 * 1024 * 1024,
+  maxBytes: 50 * 1024 * 1024,
   maxDurationMs: 180_000,
   maxLongEdge: 1920,
   maxShortEdge: 1080,

@@ -199,6 +199,21 @@ test("upload retry preserves one reservation and rejects changed immutable input
   assert.equal(changed.body.error.code, "IDEMPOTENCY_CONFLICT");
 });
 
+test("Supabase Free upload boundary is enforced before reserving storage or persisting a video", async () => {
+  const token = await client();
+  const input = { file_name: "at-limit.mp4", size_bytes: 50 * 1024 ** 2, content_type: "video/mp4" };
+  const accepted = await request("/v1/videos", token, { ...input, request_id: randomUUID() });
+  assert.equal(accepted.response.status, 201, JSON.stringify(accepted.body));
+  assert.equal(accepted.body.upload.method, "PUT");
+  const rejected = await request("/v1/videos", token, { ...input, size_bytes: input.size_bytes + 1, request_id: randomUUID() });
+  assert.equal(rejected.response.status, 400, JSON.stringify(rejected.body));
+  assert.equal(rejected.body.error.code, "BAD_REQUEST");
+  assert.match(rejected.body.error.message, /size_bytes/);
+  assert.ok(rejected.body.hint);
+  assert.ok(rejected.body.next_action);
+  assert.equal(Number((await ctx.sql`select count(*) as n from videos`)[0]!.n), 1);
+});
+
 test("incomplete uploads cannot quote or dispatch and per-client upload cap is atomic", async () => {
   const token = await client();
   const { videoId } = await upload(token);

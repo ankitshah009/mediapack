@@ -257,7 +257,7 @@ async function prepareProbe(ctx: Ctx, op: Row, wr: WorkResult): Promise<Prepared
   if (!st || st.size !== p.size_bytes) return bad("probe size does not match stored object");
   const long = Math.max(p.width, p.height), short = Math.min(p.width, p.height);
   const reject = (code: string, message: string): Prepared => ({ result: { accepted: false, reject_code: code, reject_message: message }, usage: {} });
-  if (p.size_bytes > INPUT_LIMITS.maxBytes) return reject("INPUT_LIMIT_EXCEEDED", "File exceeds 100 MiB.");
+  if (p.size_bytes > INPUT_LIMITS.maxBytes) return reject("INPUT_LIMIT_EXCEEDED", `File exceeds ${INPUT_LIMITS.maxBytes / 1024 ** 2} MiB.`);
   if (p.duration_ms <= 0 || p.duration_ms > INPUT_LIMITS.maxDurationMs) return reject("INPUT_LIMIT_EXCEEDED", "Duration must be at most 180 seconds.");
   if (long > INPUT_LIMITS.maxLongEdge || short > INPUT_LIMITS.maxShortEdge) return reject("INPUT_LIMIT_EXCEEDED", "Dimensions exceed 1920x1080.");
   return { result: { accepted: true, sha256: p.sha256, size_bytes: p.size_bytes, duration_ms: p.duration_ms, width: p.width, height: p.height, rotation: p.rotation, audio: p.audio }, usage: {} };

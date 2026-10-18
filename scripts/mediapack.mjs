@@ -306,7 +306,7 @@ async function main() {
       const file = resolve(args[0]);
       const info = await stat(file);
       const contentType = { '.mp4': 'video/mp4', '.webm': 'video/webm' }[extname(file).toLowerCase()];
-      if (!info.isFile() || !contentType || info.size <= 0 || info.size > 100 * 1024 ** 2) fail('Upload requires a nonempty MP4/WebM regular file of at most 100 MiB. Server preflight validates actual media.');
+      if (!info.isFile() || !contentType || info.size <= 0 || info.size > 50 * 1024 ** 2) fail('Upload requires a nonempty MP4/WebM regular file of at most 50 MiB. Server preflight validates actual media.');
       const result = await api('/v1/videos', { method: 'POST', body: { request_id: requestId(), file_name: basename(file), size_bytes: info.size, content_type: contentType } });
       console.error(`video_id=${result.video_id}`);
       if (result.upload) {

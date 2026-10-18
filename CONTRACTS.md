@@ -2,7 +2,7 @@ MediaPack implementation contracts
 These are the application's contracts to implement, not copies of vendor SDK method signatures. Keep the wire shapes in one TypeScript/Zod package and reuse the same service functions from HTTP routes, MCP tools, CLI helpers, and the React viewer.
 1. Fixed MVP product contract
 One purchase activates one immutable uploaded video for 24 hours. The proposed demo price is USD 0.50, paid in Stripe sandbox mode. The pack includes indexing, three distinct searches, eight delivered source frames, fifteen seconds of delivered source clips, and 8,000 characters of evidence text. This is a demo product configuration, not a claim that the price covers every provider cost.
-Input limits: 100 MiB, 180 seconds, maximum displayed dimensions 1920 by 1080. Accept MP4 or WebM with an actual decodable video stream. Audio is optional. Validate content with ffprobe; do not trust the filename, supplied MIME type, byte count, or duration. A 1080 by 1920 portrait video may be accepted by comparing long and short edges instead of a landscape-only width check; implement this explicitly.
+Input limits: 50 MiB, 180 seconds, maximum displayed dimensions 1920 by 1080. Accept MP4 or WebM with an actual decodable video stream. Audio is optional. Validate content with ffprobe; do not trust the filename, supplied MIME type, byte count, or duration. A 1080 by 1920 portrait video may be accepted by comparing long and short edges instead of a landscape-only width check; implement this explicitly.
 The canonical source is a frozen object in a private Supabase bucket. Disable overwrites. A worker computes SHA-256 over the actual bytes before a quote becomes purchasable. Quote and job reference the same object and digest throughout the workflow.
 Search matches are intervals supported by transcript segments, inspected frames, or both. A model can return no match. Observations do not imply a root cause, verified fix, identity verification, or any other specialized judgment.
 2. Access model
@@ -49,10 +49,10 @@ Create and complete an upload
 {
   "request_id": "<uuid>",
   "file_name": "product-walkthrough.mp4",
-  "size_bytes": 73400320,
+  "size_bytes": 31457280,
   "content_type": "video/mp4"
 }
-Creation returns video_id, upload instructions from the actual Storage API, and state: uploading. Implement Supabase signed resumable upload for files above 6 MB. The browser and CLI stream to Storage directly; do not route a 100 MiB file through the Manufact HTTP process or the LLM context. Never fabricate a TUS signed-token format: follow the current Storage SDK and resumable-upload documentation.
+Creation returns video_id, upload instructions from the actual Storage API, and state: uploading. Implement Supabase signed resumable upload for files above 6 MB. The browser and CLI stream to Storage directly; do not route a 50 MiB file through the Manufact HTTP process or the LLM context. Never fabricate a TUS signed-token format: follow the current Storage SDK and resumable-upload documentation.
 Completion uses the same video ID and authenticated client. It returns probing after the probe operation is durably queued. Probe checks actual size, SHA-256, media streams, display rotation, duration, and supported dimensions. Repeating completion returns the existing probe. Rejected media never becomes purchasable.
 Quote result
 {

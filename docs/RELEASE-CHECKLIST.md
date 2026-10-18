@@ -21,6 +21,8 @@ This runbook describes how to release the complete project and prove its critica
 
 Local source-publication checks on October 18, 2026 (UTC) passed: 25 backend tests, 30 worker tests, 27 setup-helper tests including actual disposable Postgres, 10 web tests and 10 MCP tests; all 42 SQL invariants; web lint and production build; MCP typecheck, production build and a fresh CLI runtime smoke. A freshly started standalone Next.js server served the dashboard, pairing page and all 12 referenced browser assets, with expected actionable 401 and unconfigured-database 503 responses. The Blaxel packaging preflight also passed. The web build retained the previously recorded third-party Tempo dynamic-import warning. These checks made no live provider purchase and do not establish a configured cloud database or full paid video workflow.
 
+The subsequent Free-plan update passed 26 backend, 30 worker, 15 Supabase setup, 11 web and 11 MCP tests, plus web lint/build, MCP typecheck/build/runtime smoke and the packaging preflight. A fresh standalone Next.js server with disposable Postgres proved browser session creation, the exact 50 MiB HTTP reservation boundary, safe retry and owner isolation. Storage was a local provider-edge fixture. See the verification record for the authorization blocker and the limits of this runtime evidence.
+
 The project includes `apps/web`, `apps/mediapack`, `apps/mcp`, `worker`, `supabase`, `scripts`, fixtures and documentation. Next.js imports the shared backend by relative path, so publishing the dashboard alone is incomplete.
 
 Before committing, verify that the Git root contains all these directories and the intended remote is configured. Keep credentials and generated artifacts excluded: `.env*` except examples, `.projects/vault`, `.projects/cache`, `.blaxel`, `.aws`, private CLI state, dependencies and build output. Preserve the fixture recordings needed by media tests; source repositories and image builds have different input requirements.
@@ -64,7 +66,7 @@ Database and transport integration tests need local Postgres, ffmpeg and permiss
 
 Configuration presence is only a prerequisite. `/health` can return 200 while its database field says `unconfigured`. A valid signature on an ignored Primitive payload proves signature checking, not persistence or worker delivery.
 
-The current upload contract is 100 MiB. Verify Storage's global file limit as well as the bucket limit; a smaller provider limit requires a coordinated app change. See account setup for the documented Free/Pro constraint. Blaxel credits do not establish a balance with another provider.
+The user selected Supabase Free. The current upload contract and private bucket use 50 MiB (52,428,800 bytes). Verify Storage's global file limit as well as the bucket limit before calling uploads operational. See account setup for the current authorization status. Blaxel credits do not establish a balance with another provider.
 
 ## Deploy and prove the runtime
 

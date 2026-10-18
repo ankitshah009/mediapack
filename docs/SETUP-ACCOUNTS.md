@@ -12,7 +12,9 @@ Put server values in `apps/web/.env.local` (gitignored). The Next.js dashboard a
 
 ## 2. Stripe Projects — provisions Supabase
 
-Verified locally on October 17, 2026: Stripe CLI 1.54.0 and Projects plugin 0.50.0 are installed. An unauthenticated live catalog read succeeded and lists `supabase/free` ($0), `supabase/pro` ($25/month), and the `supabase/project` deployable. Account sign-in and plan selection are still pending; no Supabase project has been created.
+Stripe CLI 1.54.0 and Projects plugin 0.50.0 are installed. A live catalog read lists `supabase/free` ($0), `supabase/pro` ($25/month), and the `supabase/project` deployable. The user selected **Free**; no paid plan is authorized. Native CLI sign-in succeeded, but its only authorized account context is a sandbox. Projects initialization returns `PROJECTS_CONTEXT_MISMATCH` because it requires live-mode infrastructure credentials; the suggested `stripe switch context <account_id> --live --format json` was rejected because that account has no authorized live access. No Supabase project has been created.
+
+Authorize the parent business account through Stripe's native CLI reauthorization flow, then select its live context. If the authorization link opens the sandbox, use the Dashboard account selector to leave the sandbox and select its parent business before opening [Projects setup](https://dashboard.stripe.com/projects/new). Do not repeatedly re-run login or init for the same context mismatch. Complete the native reauthorization step returned by the CLI once parent-account access has been granted, then inspect the authorized contexts. Infrastructure authorization does not change MediaPack's `PAYMENTS_MODE=test`.
 
 Browser sessions need the database and a stable `CAPABILITY_PEPPER`; uploads also need Storage. Stripe merchant payment credentials are separate and are not required for these two steps.
 
@@ -23,7 +25,7 @@ stripe projects init mediapack --mode manual --skip-skills --preflight --json --
 stripe projects init mediapack --mode manual --skip-skills --json --yes --interactive=false
 ```
 
-The manual mode preserves the existing Next.js app. `--skip-skills` preserves the repository's agent instructions. Use Stripe's native browser login when requested; do not paste keys into chat. Provision the selected plan before its project, using the actual installed `add --help`. For example, after selecting Free:
+The manual mode preserves the existing Next.js app. `--skip-skills` preserves the repository's agent instructions. Use Stripe's native browser login when requested; do not paste keys into chat. Inspect existing resources before provisioning to avoid duplicates. Provision the selected Free plan before its project, using the actual installed `add --help`:
 
 ```sh
 stripe projects add supabase/free --json --yes --accept-tos --interactive=false
@@ -31,7 +33,7 @@ stripe projects add supabase/project --name mediapack-db --config '{"name":"medi
 stripe projects env --pull --json --interactive=false
 ```
 
-**Resolve the upload limit before deployment.** Supabase Free has a global maximum file size of 50 MB. The current app accepts 100 MiB, which needs Pro or a coordinated application limit change. The bucket cannot override the project-wide limit. Pro's $25/month is separate from Blaxel credits; do not select a paid plan without the user's choice. Sources: [Supabase limits](https://supabase.com/docs/guides/storage/uploads/file-limits), [pricing](https://supabase.com/pricing).
+**Free-plan upload policy:** Supabase documents a 50 MB global file limit on Free. MediaPack now enforces 50 MiB (52,428,800 bytes) in browser preflight, REST, MCP, CLI, worker validation and bucket setup. The bucket cannot override the project-wide limit, so verify the actual global setting after provisioning. Keep Free selected; Pro starts at $25/month and is not authorized. Sources: [Supabase limits](https://supabase.com/docs/guides/storage/uploads/file-limits), [pricing](https://supabase.com/pricing).
 
 Read the actual generated environment variable names without printing their values. Transfer the pooled `DATABASE_URL`, `SUPABASE_URL`, and server-only `SUPABASE_SERVICE_ROLE_KEY` into private `apps/web/.env.blaxel`, preserving the existing independent internal secrets. Projects' `env --pull` writes locally; it does not configure the Blaxel process. Keep `.projects` vault/cache and `.env*` out of builds and source control.
 
@@ -42,7 +44,7 @@ node scripts/setup-supabase.mjs --plan
 node scripts/setup-supabase.mjs --apply
 ```
 
-The helper tracks migration checksums and applies each new migration atomically. It refuses an untracked pre-existing app schema rather than rerunning the non-idempotent SQL. Its bucket requirement is currently 100 MiB; a Free deployment needs that requirement and the app limit coordinated first. Verify the project global limit separately. Restart the current Blaxel web host using the exact command in the README, then prove `/health` database connectivity, `/viewer/bootstrap`, the browser cookie, authenticated video listing and a real signed upload. Do not treat configured environment names as runtime verification.
+The helper tracks migration checksums and applies each new migration atomically. It refuses an untracked pre-existing app schema rather than rerunning the non-idempotent SQL. It requires an exact private 50 MiB bucket and refuses a smaller readback. Verify the project global limit separately. Restart the current Blaxel web host using the exact command in the README, then prove `/health` database connectivity, `/viewer/bootstrap`, the browser cookie, authenticated video listing and a real signed upload. Do not treat configured environment names as runtime verification.
 
 Blaxel already has a credited workspace; reuse it without provisioning another plan. `stripe projects share` can produce the submission stack link after a service exists.
 

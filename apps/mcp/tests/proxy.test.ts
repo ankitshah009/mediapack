@@ -57,6 +57,18 @@ test("create, completion and quote use existing REST routes and preserve explici
   assert.match(quote.structuredContent.next_action as string, /do not pay again/);
 });
 
+test("Free-plan upload limit rejects oversized agent input before calling the API", async () => {
+  const api = fakeApi(() => Response.json({ video_id: video, upload: { method: "PUT", url: "https://storage.invalid/upload" } }));
+  const input = { file_name: "at-limit.mp4", size_bytes: 50 * 1024 ** 2, content_type: "video/mp4", request_id: requestId };
+  const accepted = await callTool("create_video", input, context(), api.options);
+  assert.equal("isError" in accepted, false);
+  assert.equal(api.calls.length, 1);
+  const rejected = await callTool("create_video", { ...input, size_bytes: input.size_bytes + 1 }, context(), api.options);
+  assert.equal("isError" in rejected && rejected.isError, true);
+  assert.equal((rejected.structuredContent.error as any).code, "BAD_REQUEST");
+  assert.equal(api.calls.length, 1, "oversized inputs must not reserve storage");
+});
+
 test("pending search and media operations preserve operation fields and stable retry IDs", async () => {
   const api = fakeApi(() => Response.json({ operation_id: "pending-op", state: "running", result: null }, { status: 202, headers: { "retry-after": "7" } }));
   const first = await callTool("search_video", { job_id: job, query: "timeout changed" }, context(), api.options);

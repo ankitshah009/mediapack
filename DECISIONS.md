@@ -9,6 +9,7 @@
 - DB access from the control service: **direct Postgres** via npm `postgres` (porsager) using `DATABASE_URL`
   (Supabase pooled connection string). Reason: real transactions + SQL helpers, and testable against local Postgres
   (`scripts/test-db.sh`). Storage uses `@supabase/supabase-js` with the service role (server only).
+- Supabase plan: **Free**, as chosen by the user. Source uploads are limited to 50 MiB (52,428,800 bytes) across browser, REST, MCP, CLI, worker and the private bucket. Keep Stripe payments in test mode; Stripe Projects' infrastructure authorization is separate.
 - Schema + transaction helpers: `supabase/migrations/0001_init.sql` — 42 invariants pass (`bash scripts/test-db.sh`).
   Call the helpers; don't reimplement their logic in TS. New SQL goes in `0002_*.sql` + tests.
 - Shared wire types: `apps/mediapack/src/contracts/index.ts`. Change only via the lead.
@@ -34,7 +35,7 @@
 ## Trimmed for the deadline (designed, documented, not built)
 - Supabase Cron/pg_net: `/internal/tick` exists and is called opportunistically after commits and by `scripts/tick`;
   scheduling it via Cron is a documented one-liner, done only if time allows.
-- Resumable (TUS) upload: 100 MiB cap → standard signed upload URL (`createSignedUploadUrl`).
+- Resumable (TUS) upload: 50 MiB cap → standard signed upload URL (`createSignedUploadUrl`).
 - Refunds: manual; UI never shows "refunded".
 - Rate limiting: per-client unpaid-upload cap (3) + global unpaid cap via SQL count; no IP limiter.
 

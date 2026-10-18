@@ -176,7 +176,7 @@ export const ERROR_COPY: Record<string, { title: string; hint: string }> = {
   UNAUTHORIZED: { title: "No browser session", hint: "Start a session, or pair this browser with your agent's client." },
   UPLOAD_INCOMPLETE: { title: "Upload not finished", hint: "The file has not fully reached storage. Upload it again." },
   MEDIA_UNSUPPORTED: { title: "Media not supported", hint: "Use an MP4 or WebM with a readable video stream." },
-  INPUT_LIMIT_EXCEEDED: { title: "Over the input limit", hint: "Up to 100 MB, 3 minutes, 1920×1080." },
+  INPUT_LIMIT_EXCEEDED: { title: "Over the input limit", hint: "Up to 50 MB, 3 minutes, 1920×1080." },
   VIDEO_NOT_READY: { title: "Video still processing", hint: "Verification has not finished yet." },
   QUOTE_EXPIRED: { title: "Quote expired", hint: "Request a fresh quote. Nothing was charged." },
   PAYMENT_REQUIRED: { title: "Payment required", hint: "The agent must pay this quote before the pack unlocks." },

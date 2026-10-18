@@ -40,7 +40,7 @@ export function registerTools(server: MCPServer, ctx: Ctx) {
 
   server.tool({
     name: "create_video",
-    description: "Reserve an upload for one video (MP4/WebM, <=100 MiB, <=180 s). Returns a signed upload target: PUT the raw file bytes to upload.url with upload.headers, then call complete_upload.",
+    description: "Reserve an upload for one video (MP4/WebM, <=50 MiB, <=180 s). Returns a signed upload target: PUT the raw file bytes to upload.url with upload.headers, then call complete_upload.",
     inputSchema: z.object({
       file_name: z.string().min(1).max(200), size_bytes: z.number().int().positive(),
       content_type: z.enum(["video/mp4", "video/webm"]), request_id: RequestId,

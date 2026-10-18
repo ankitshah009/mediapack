@@ -1,0 +1,42 @@
+[
+  {
+    "id": "hook",
+    "seconds": 6.08
+  },
+  {
+    "id": "reveal",
+    "seconds": 3.91
+  },
+  {
+    "id": "upload",
+    "seconds": 10.92
+  },
+  {
+    "id": "pay",
+    "seconds": 13.35
+  },
+  {
+    "id": "pipeline",
+    "seconds": 10.9
+  },
+  {
+    "id": "answer",
+    "seconds": 10.05
+  },
+  {
+    "id": "evidence",
+    "seconds": 6.16
+  },
+  {
+    "id": "memory",
+    "seconds": 11.72
+  },
+  {
+    "id": "limits",
+    "seconds": 8.3
+  },
+  {
+    "id": "close",
+    "seconds": 8.54
+  }
+]

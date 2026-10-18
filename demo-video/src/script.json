@@ -1,0 +1,12 @@
+[
+  { "id": "hook", "text": "Your agent can read code, logs, and docs. Hand it a screen recording of a bug, and it's blind." },
+  { "id": "reveal", "text": "MediaPack gives agents paid, verifiable access to video." },
+  { "id": "upload", "text": "Upload a recording. The server checks the real file with ffprobe, then freezes a quote: fifty cents for twenty-four hours, three searches, eight frames, fifteen seconds of clips." },
+  { "id": "pay", "text": "The agent pays for itself. A machine payment over Stripe, answering an HTTP four-oh-two. No checkout page, no human. It's test mode, and the purchase is idempotent, so a retry can never charge twice." },
+  { "id": "pipeline", "text": "The work travels over Primitive to a sandboxed Blaxel worker running ffmpeg, Whisper and a vision model. Every step is persisted before it happens, so a crash resumes instead of losing work." },
+  { "id": "answer", "text": "Now ask what happened after the settings page reloads. The answer cites the exact seconds: saved as sixty, shown as thirty. Click the citation and the source jumps right there." },
+  { "id": "evidence", "text": "Then retrieve only what's cited: source frames and a playable clip, each with a SHA two fifty-six hash." },
+  { "id": "memory", "text": "Index once, ask many times. In our measured run, indexing took three hundred twenty-seven thousand input tokens. A follow-up question took twenty-five hundred. About a hundred thirty times smaller." },
+  { "id": "limits", "text": "Allowance is enforced inside Postgres, so a looping agent can't overspend. When the pack is used up, it says so, with the next action." },
+  { "id": "close", "text": "Stripe, Primitive, Blaxel, Supabase, and an MCP server on Manufact. MediaPack. It's live, and it's open source." }
+]

@@ -1,13 +1,15 @@
-import type { JobEvent } from "../api/client";
+import { useState } from "react";
+import type { JobEvent, OperationView } from "../api/client";
 import { clock, offset } from "../lib/format";
-import { Empty } from "./ui";
+import { groupSteps, stage, title } from "../lib/steps";
+import { Badge, Empty } from "./ui";
 
 type Source = "Stripe" | "Primitive" | "Worker" | "MediaPack";
-const SRC: Record<Source, { text: string; dot: string }> = {
-  Stripe: { text: "text-stripe", dot: "bg-stripe" },
-  Primitive: { text: "text-primitive", dot: "bg-primitive" },
-  Worker: { text: "text-worker", dot: "bg-worker" },
-  MediaPack: { text: "text-muted", dot: "bg-muted" },
+const SRC: Record<Source, { text: string; dot: string; chip: string }> = {
+  Stripe: { text: "text-stripe", dot: "bg-stripe", chip: "bg-stripe-soft text-stripe" },
+  Primitive: { text: "text-primitive", dot: "bg-primitive", chip: "bg-primitive/15 text-primitive" },
+  Worker: { text: "text-worker", dot: "bg-worker", chip: "bg-worker/15 text-worker" },
+  MediaPack: { text: "text-muted", dot: "bg-muted", chip: "bg-line text-text" },
 };
 
 export function sourceOf(kind: string): Source {
@@ -16,23 +18,6 @@ export function sourceOf(kind: string): Source {
   if (/^(worker|blaxel)\./.test(kind)) return "Worker";
   return "MediaPack";
 }
-
-const TITLES: Record<string, string> = {
-  "quote.issued": "Quote issued",
-  "payment.challenge": "Payment required (402)",
-  "payment.verified": "Payment verified",
-  "payment.reconciling": "Payment outcome pending",
-  "primitive.request_sent": "Work request sent",
-  "primitive.request_delivered": "Work request delivered",
-  "primitive.result_received": "Result received",
-  "worker.launched": "Worker launched",
-  "worker.started": "Worker started",
-  "operation.queued": "Operation queued",
-  "operation.succeeded": "Operation succeeded",
-  "operation.failed": "Operation failed",
-  "operation.retried": "Operation retried",
-};
-const title = (k: string) => TITLES[k] ?? k.replace(/[._]/g, " ").replace(/^\w/, (c) => c.toUpperCase());
 
 /** Pick a few human-meaningful detail fields; the full payload stays available in a disclosure. */
 const SHOW = ["action", "kind", "code", "message", "message_id", "email_id", "payment_intent_id", "amount_minor", "mode", "generation", "attempt", "state"];
@@ -47,7 +32,20 @@ function summarize(d: Record<string, unknown>): [string, string][] {
   return out;
 }
 
-export function ActivityFeed({ events, error }: { events: JobEvent[]; error?: string }) {
+function elapsed(a: string, b: string): string {
+  const ms = new Date(b).getTime() - new Date(a).getTime();
+  if (!Number.isFinite(ms) || ms <= 0) return "";
+  return ms < 60_000 ? `${(ms / 1000).toFixed(1)}s` : `${Math.floor(ms / 60_000)}m ${String(Math.round((ms % 60_000) / 1000)).padStart(2, "0")}s`;
+}
+
+const STATUS = {
+  done: { dot: "bg-ok", badge: "ok" as const, text: "done" },
+  failed: { dot: "bg-danger", badge: "danger" as const, text: "failed" },
+  active: { dot: "bg-worker animate-pulse", badge: "warn" as const, text: "running" },
+};
+
+export function ActivityFeed({ events, operations, error }: { events: JobEvent[]; operations?: OperationView[]; error?: string }) {
+  const [raw, setRaw] = useState(false);
   if (events.length === 0) {
     return error ? (
       <p role="alert" className="text-sm text-danger">{error}</p>
@@ -56,10 +54,64 @@ export function ActivityFeed({ events, error }: { events: JobEvent[]; error?: st
     );
   }
   const t0 = events[0].created_at;
+  const steps = groupSteps(events, operations);
   return (
     <div>
-      <p className="mb-2 text-[11px] text-muted">Times are runtime offsets from the first event, not video timestamps.</p>
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <p className="text-[11px] text-muted">{steps.length} steps · {events.length} persisted events</p>
+        <button type="button" onClick={() => setRaw((r) => !r)} className="text-[11px] font-medium text-muted underline-offset-2 hover:text-text hover:underline" aria-pressed={raw}>
+          {raw ? "Show steps" : "Show raw events"}
+        </button>
+      </div>
       {error && <p role="alert" className="mb-2 text-xs text-danger">{error}</p>}
+      {raw ? <RawEvents events={events} t0={t0} /> : (
+        <ol className="flex flex-col gap-2" aria-label="Job steps">
+          {steps.map((s) => {
+            const first = s.events[0].created_at;
+            const last = s.events[s.events.length - 1].created_at;
+            const st = STATUS[s.status];
+            return (
+              <li key={s.key} className="rounded-xl border border-line bg-paper px-3 py-2">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="flex min-w-0 items-center gap-2 text-sm font-medium">
+                    <span className={`h-2 w-2 shrink-0 rounded-full ${st.dot}`} aria-hidden="true" />
+                    <span className="truncate">{s.label}</span>
+                  </p>
+                  <span className="flex shrink-0 items-center gap-1.5">
+                    {s.status !== "done" && <Badge tone={st.badge}>{st.text}</Badge>}
+                    <time dateTime={first} title={new Date(first).toLocaleString()} className="font-mono text-[11px] text-muted">{offset(first, t0)}</time>
+                  </span>
+                </div>
+                {s.detail && <p className="mt-0.5 truncate pl-4 text-[11px] text-muted" title={s.detail}>{s.detail}</p>}
+                <p className="mt-1.5 flex flex-wrap items-center gap-1 pl-4" aria-label={`${s.label} stages`}>
+                  {dedupe(s.events).map((e, i) => (
+                    <span key={e.id} className="flex items-center gap-1">
+                      {i > 0 && <span className="text-[10px] text-muted" aria-hidden="true">→</span>}
+                      <span className={`rounded-full px-1.5 py-px text-[10px] font-medium leading-4 ${SRC[sourceOf(e.kind)].chip}`} title={`${title(e.kind)} · ${clock(e.created_at)}`}>
+                        {stage(e.kind)}
+                      </span>
+                    </span>
+                  ))}
+                  {elapsed(first, last) && <span className="ml-1 font-mono text-[10px] text-muted">{elapsed(first, last)}</span>}
+                </p>
+              </li>
+            );
+          })}
+        </ol>
+      )}
+    </div>
+  );
+}
+
+/** Collapse consecutive repeats of the same stage (e.g. a retry loop) into one chip. */
+function dedupe(events: JobEvent[]): JobEvent[] {
+  return events.filter((e, i) => i === 0 || stage(e.kind) !== stage(events[i - 1].kind));
+}
+
+function RawEvents({ events, t0 }: { events: JobEvent[]; t0: string }) {
+  return (
+    <>
+      <p className="mb-2 text-[11px] text-muted">Times are runtime offsets from the first event, not video timestamps.</p>
       <ol className="relative flex flex-col gap-3 border-l border-line pl-4" aria-label="Job events">
         {events.map((e) => {
           const s = sourceOf(e.kind);
@@ -84,6 +136,6 @@ export function ActivityFeed({ events, error }: { events: JobEvent[]; error?: st
           );
         })}
       </ol>
-    </div>
+    </>
   );
 }

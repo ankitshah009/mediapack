@@ -12,7 +12,7 @@ import { ErrorPanel, Link, Shell } from "../components/Shell";
 import { SourceInspector } from "../components/SourceInspector";
 import { Badge, Card, SectionTitle, Skeleton } from "../components/ui";
 import { normalize } from "../components/results";
-import { requestIdFor, settleRequest } from "../lib/format";
+import { readableError, requestIdFor, settleRequest } from "../lib/format";
 import { useNavigate } from "../lib/router";
 
 export function JobPage({ jobId }: { jobId: string }) {
@@ -65,7 +65,7 @@ export function JobPage({ jobId }: { jobId: string }) {
         <>
           <Card aria-labelledby="act-h">
             <SectionTitle id="act-h" aside={job.error ? <Badge tone="danger">Offline, retrying</Badge> : undefined}>Activity</SectionTitle>
-            <ActivityFeed events={events} error={evError?.message} />
+            <ActivityFeed events={events} operations={j.operations} error={evError?.message} />
           </Card>
           <AllowanceMeters job={j} />
           <ReceiptPanel job={j} />
@@ -88,7 +88,7 @@ export function JobPage({ jobId }: { jobId: string }) {
       {failedOps.map((o) => (
         <div key={o.operation_id} role="alert" className="rounded-2xl border border-danger/30 bg-danger-soft p-4 text-sm">
           <p className="font-medium text-danger">Worker failed: {o.kind.replace("_", " ")}</p>
-          <p className="mt-0.5">{o.error?.message ?? "No detail was reported."} {o.error && <Badge tone="danger">{o.error.code}</Badge>}</p>
+          <p className="mt-0.5">{readableError(o.error?.message)} {o.error && <Badge tone="danger">{o.error.code}</Badge>}</p>
           <p className="mt-1 text-xs text-muted">Spent allowance is preserved. Nothing is re-bought automatically.</p>
         </div>
       ))}

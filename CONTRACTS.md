@@ -25,6 +25,7 @@ GET /llms.txt    —    Service purpose, supported flow, limits, docs and MCP en
 POST /v1/clients    —    Rate-limited bootstrap; create expiring client credential for the CLI/HTTP caller
 POST /v1/clients/viewer-code    —    Authenticated one-time code for pairing a browser to the same client
 POST /viewer/session    —    Consume pairing code and set an HttpOnly same-origin cookie
+POST /viewer/jobs/:job_id/demo-purchase    —    Signed browser session and allowed Origin required; capability headers are refused. Test-mode demo agent pays this owner's stored quote through the real MPP flow in-process; returns JobView (paid or reconciling). Disabled deployments return 404; atomic rolling-24h demo caps return 429 ALLOWANCE_EXCEEDED. A durable reservation prevents another token for the same quote, including after restart or an uncertain response.
 POST /v1/videos    create_video    Create a client-owned video record and scoped upload instructions
 POST /v1/videos/:video_id/complete    complete_upload    Check stored object; enqueue bounded preflight probe
 GET /v1/videos/:video_id    get_video    Read upload/probe state and verified media metadata

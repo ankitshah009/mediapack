@@ -63,6 +63,7 @@ Database and transport integration tests need local Postgres, ffmpeg and permiss
 | Blaxel | Correct images and allocations; ready logs; supported runtime launch authentication; bounded workers |
 | Models | Actual vision, transcription and search calls, or a verified packaged local engine |
 | Stripe sandbox | Verified test account, profile or explicit internal test-network configuration, and owned webhook; one purchase unlocks exactly one entitlement. Public Link wallets require an actual profile. |
+| Browser demo buyer | Apply migration `0003_demo_buyer.sql` before enabling `DEMO_BUYER_ENABLED`; verify test-key/internal-network gates, signed-session ownership and atomic rolling quotas. Failed or uncertain reservations stay consumed. |
 | Manufact | Public MCP endpoint forwards caller-specific capabilities to the current API origin |
 | Recovery | Deployed scheduler invokes the authenticated tick and recovers an interrupted operation |
 
@@ -86,3 +87,12 @@ For the full demonstration:
 6. Preserve redacted job, operation, payment, message and artifact references with the tested commit, image tags, runtime versions and time.
 
 Keep capabilities, cookies, signing secrets, payment tokens, signed URLs and raw personal data out of the evidence record. Describe observed evidence without claiming hidden causes. Keep Stripe test mode visible throughout.
+
+For the browser demo buyer, run `bash scripts/test-demo-buyer-db.sh` against its disposable local cluster, then opt into a real deployed test purchase explicitly:
+
+```sh
+RUN_DEMO_PAY=1 MEDIAPACK_URL=https://mediapack-mediapack.preview.bl.run \
+  node demo-video/capture/e2e-live.mjs --demo-only
+```
+
+This creates a fresh browser owner and pack, uses the actual payment button, waits for indexing, searches the source, exports frames and a clip, and checks downloads and same-quote idempotency. It spends real infrastructure/model credits while Stripe stays in test mode. The focused run skips historical paid-job fixtures. Private browser state and proof are saved under ignored `.blaxel/`; if the run stops after payment starts, inspect that same job before another purchase.

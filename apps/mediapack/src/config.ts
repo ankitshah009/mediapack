@@ -37,6 +37,9 @@ const Env = z.object({
   UNPAID_STORAGE_CAP_BYTES: z.coerce.number().int().positive().default(2 * 1024 ** 3),
   GLOBAL_CLIENTS_PER_HOUR: z.coerce.number().int().positive().default(300),
   SOURCE_CLIENTS_PER_HOUR: z.coerce.number().int().positive().default(20),
+  DEMO_BUYER_ENABLED: z.enum(["true", "false"]).default("false"),
+  DEMO_BUYER_PER_CLIENT_DAILY: z.coerce.number().int().positive().max(2).default(2),
+  DEMO_BUYER_GLOBAL_DAILY: z.coerce.number().int().positive().max(100).default(100),
   WORKER_LEASE_SECONDS: z.coerce.number().int().positive().default(1200),
   WORKER_TOKEN_TTL_SECONDS: z.coerce.number().int().positive().default(1800),
   APP_DIST_DIR: Str,
@@ -72,6 +75,8 @@ export interface Config {
   unpaidStorageCapBytes: number;
   globalClientsPerHour: number;
   sourceClientsPerHour: number;
+  /** In-browser demo agent. `enabled` already folds in every safety condition; check only it. */
+  demoBuyer: { enabled: boolean; perClientDaily: number; globalDaily: number };
   workerLeaseSeconds: number;
   workerTokenTtlSeconds: number;
   appDistDir?: string;
@@ -126,6 +131,14 @@ export function parseConfig(raw: Record<string, string | undefined> = process.en
     unpaidStorageCapBytes: e.UNPAID_STORAGE_CAP_BYTES,
     globalClientsPerHour: e.GLOBAL_CLIENTS_PER_HOUR,
     sourceClientsPerHour: e.SOURCE_CLIENTS_PER_HOUR,
+    demoBuyer: {
+      // Test mode only, and only when MPP challenges use the explicit `internal` sandbox network (a configured
+      // STRIPE_PROFILE_ID takes precedence in requireStripe(), so it must be absent). Anything else stays off.
+      enabled: e.DEMO_BUYER_ENABLED === "true" && e.PAYMENTS_MODE === "test" && /^(sk|rk)_test_/.test(e.STRIPE_SECRET_KEY ?? "") &&
+        e.STRIPE_TEST_NETWORK_ID === "internal" && !e.STRIPE_PROFILE_ID,
+      perClientDaily: e.DEMO_BUYER_PER_CLIENT_DAILY,
+      globalDaily: e.DEMO_BUYER_GLOBAL_DAILY,
+    },
     workerLeaseSeconds: e.WORKER_LEASE_SECONDS,
     workerTokenTtlSeconds: e.WORKER_TOKEN_TTL_SECONDS,
     appDistDir: e.APP_DIST_DIR,

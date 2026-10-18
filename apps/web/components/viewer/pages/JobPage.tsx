@@ -82,7 +82,9 @@ export function JobPage({ jobId }: { jobId: string }) {
         {job.error && <div className="mt-3"><ErrorPanel error={job.error} onRetry={job.reload} /></div>}
       </div>
 
-      {(j.payment_state !== "paid" || j.state === "awaiting_payment") && <QuotePanel job={j} onNewQuote={newQuote} busy={quoting} />}
+      {(j.payment_state !== "paid" || j.state === "awaiting_payment") && (
+        <QuotePanel job={j} onNewQuote={newQuote} busy={quoting} onPaid={job.reload} />
+      )}
       {qErr && <ErrorPanel error={qErr} />}
 
       {failedOps.map((o) => (

@@ -1,4 +1,6 @@
 // Buyer-only sandbox token issuance. No merchant or worker credentials belong here.
+// KEEP IN SYNC with apps/mediapack/src/adapters/stripe-buyer.ts: the server's in-browser demo agent runs a faithful
+// TypeScript port of this issuer. Change validation, the request or the retry rules in both files together.
 const TEST_HELPER_URL = 'https://api.stripe.com/v1/test_helpers/shared_payment/granted_tokens';
 
 export function createSandboxTokenIssuer({ quote, key, testNetworkId, fetchImpl = globalThis.fetch }) {

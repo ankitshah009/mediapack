@@ -29,7 +29,7 @@ See [account setup](../../docs/SETUP-ACCOUNTS.md) and [release checks](../../doc
 | --- | --- |
 | `/app`, `/app/pair`, `/app/v/:videoId`, `/app/jobs/:jobId` | Dashboard, pairing, video and job views |
 | `/v1/*` | Client, video, purchase, search and evidence operations |
-| `/viewer/*` | Browser session creation, pairing, status and logout |
+| `/viewer/*` | Browser session creation, pairing, status (`/viewer/me`, including `demo_buyer`) and logout; `POST /viewer/jobs/:job_id/demo-purchase` runs the test-mode demo agent when `DEMO_BUYER_ENABLED=true` |
 | `/health` | Integration configuration and database connectivity |
 | `/webhooks/stripe`, `/webhooks/primitive` | Verified provider callbacks |
 | `/internal/*` | Recovery tick and scoped worker artifact access |

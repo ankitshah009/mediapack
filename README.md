@@ -8,7 +8,7 @@ One USD 0.50 **test-mode** purchase covers one immutable video for 24 hours: thr
 
 Source: [ankitshah009/mediapack](https://github.com/ankitshah009/mediapack). Start with the [release checklist and documentation map](docs/RELEASE-CHECKLIST.md), [account setup](docs/SETUP-ACCOUNTS.md), and [dated verification record](docs/verification.md). The Next.js app, shared backend, Manufact proxy, worker and migrations belong in one complete source checkout.
 
-Current runtime: [dashboard](https://mediapack-mediapack.preview.bl.run/app) · [Manufact MCP](https://fast-wave-awovc.run.mcp-use.com/mcp). The dashboard now has a **stable Blaxel preview URL** (`--stable-prefix mediapack`), so releases no longer change the origin used by Stripe, Primitive, the recovery schedule or the MCP proxy. The r11 host reports database OK and no missing provider settings, and a fresh-browser end-to-end check of the public URL passed 26/26 (see the verification record). Supabase Free has the private 50 MiB bucket with strict database CA verification. Primitive delivery is enabled, with signed-event persistence and duplicate-event handling verified. The paid talk-recording and settings flows passed on r6, including the final Manufact MCP search and verified source frames/clips; the settings proof passed all 15 acceptance checks. R8–r11 change the dashboard only: the activity panel groups persisted events into one step per operation, clip thumbnails show their first frame, provider launch errors are stored as readable text, a first upload starts a browser session automatically, and a citation clicked before the source loads still seeks it. See the [verification record](docs/verification.md).
+Current runtime: [dashboard](https://mediapack-mediapack.preview.bl.run/app) · [Manufact MCP](https://fast-wave-awovc.run.mcp-use.com/mcp). **r12 adds a browser demo agent that pays your quote in Stripe test mode.** A fresh-browser upload → payment → indexing → search → frames/clip flow passed in 75.9 seconds, including checksum verification, same-quote retry, reload and mobile checks. The actual Stripe PaymentIntent and database ledger were checked independently. The **stable Blaxel preview URL** preserves the origin used by Stripe, Primitive, recovery and Manufact. Supabase Free retains the private 50 MiB bucket and strict database CA verification; Primitive carries the real worker requests and results. Earlier two-video and CLI verification remains recorded in the [verification record](docs/verification.md).
 
 ## Efficiency and video memory
 
@@ -206,6 +206,16 @@ Register the Stripe webhook at `/webhooks/stripe` for `payment_intent.succeeded`
 
 Primitive account setup is available as `node scripts/setup-primitive.mjs --plan`, then `--apply`. It discovers the existing verified managed domain, saves its signing secret and control/worker addresses in the private server env file, and prepares one **disabled org-wide** webhook without paid per-domain routing. Local CLI OAuth can authorize this setup but is never copied into the deployed app; save a persistent `PRIMITIVE_API_KEY` in `apps/web/.env.blaxel` for runtime access. An existing dedicated worker key is preserved; otherwise the supplied app key is reused for worker replies. Endpoint ownership is retained privately under `.blaxel/primitive-setup.json`, so a later preview URL change can rotate only this application's endpoint. Restart the host after config changes. Initial delivery stays disabled until database and signature checks pass. In the current runtime, delivery is enabled, signed events persist, and duplicate delivery is deduplicated. Both paid source flows, including final source-specific MCP search and exported frame/clip verification, have passed through the actual Primitive request/result path.
 
+## Try it in your browser
+
+Open the [dashboard](https://mediapack-mediapack.preview.bl.run/app), upload an MP4 or WebM, wait for verified media metadata, and request a quote. On an enabled test deployment, **Pay $0.50 with demo agent (test mode)** lets the server's demo buyer pay for your own video. No CLI, Stripe account or buyer key is needed in the browser.
+
+The button runs the real MPP exchange: the merchant returns HTTP 402, the demo buyer creates a Stripe sandbox payment token, and the merchant verifies the resulting PaymentIntent before activating the pack. Primitive then carries the indexing request and result through the 4 GB Blaxel worker. The page shows persisted progress; once ready, search for a moment and retrieve its source frames or a playable clip.
+
+Operators enable this with `DEMO_BUYER_ENABLED=true` alongside the existing test Stripe key and explicit internal sandbox network. The default rolling 24-hour limits are **2 demo starts per browser owner and 100 globally**, reserved atomically in Postgres before token issuance. A reservation is retained after a failure or uncertain response, so restarting the server or clicking again cannot mint another token for that quote. An uncertain attempt requires status checks and operator investigation before another payment.
+
+Stripe test mode moves no real money. Indexing, searches and evidence extraction use real infrastructure and model credits. The purchase limits bound demo starts; they are **not a dollar spending cap**. New browser owners can bypass the per-owner limit, so the global limit is the shared safeguard. Latency and cost vary with the uploaded video.
+
 ## Buyer CLI
 
 Run from the repository root. All commands support `--help`. JSON results go to stdout; progress and generated retry IDs go to stderr.
@@ -280,8 +290,8 @@ The hosting helper reads the private env file, sets `PUBLIC_BASE_URL`, and verif
 | Current deployment | Configuration |
 | --- | --- |
 | Dashboard | [mediapack-mediapack.preview.bl.run/app](https://mediapack-mediapack.preview.bl.run/app) |
-| Web sandbox | `mediapack-web-r11` · 2048 MiB |
-| Web image | `sandbox/mediapack-web:b30eaad65e240fa7494ff` |
+| Web sandbox | `mediapack-web-r12` · 2048 MiB |
+| Web image | `sandbox/mediapack-web:b42acfca444b6cf333f55` |
 | Worker image | `sandbox/mediapack-worker:be53b19cc608a18554956` · 4096 MiB |
 | MCP endpoint | [Manufact MCP](https://fast-wave-awovc.run.mcp-use.com/mcp) |
 | Judging lifecycle | Standby enabled · 24-hour idle-delete policy |
@@ -289,7 +299,7 @@ The hosting helper reads the private env file, sets `PUBLIC_BASE_URL`, and verif
 To apply edited private settings to the current web deployment:
 
 ```sh
-node scripts/host-blaxel.mjs --image sandbox/mediapack-web:b30eaad65e240fa7494ff --name mediapack-web-r11 --env-file apps/web/.env.blaxel --idle-ttl 24h --stable-prefix mediapack --restart
+node scripts/host-blaxel.mjs --image sandbox/mediapack-web:b42acfca444b6cf333f55 --name mediapack-web-r12 --env-file apps/web/.env.blaxel --idle-ttl 24h --stable-prefix mediapack --restart
 ```
 
 The MCP proxy forwards each caller's capability to the API. Keep only `MEDIAPACK_API_URL` in its environment; provider, database and worker secrets stay on the control server. See [account setup](docs/SETUP-ACCOUNTS.md) for callback configuration and [hosting details](docs/blaxel-costs.md) for lifecycle semantics.
@@ -333,6 +343,7 @@ Observed recovery and idle results are highlighted [below](#compute-and-idle-cos
 
 | Recorded check | Result |
 | --- | --- |
+| Fresh browser demo-agent purchase, r12 | **Passed**: real $0.50 test payment, one index, correct 60 → 30 answer, two frames and an eight-second clip, checksums, idempotent retry, reload and mobile layout |
 | Fresh public-browser session, r11 | **26/26 passed**: upload/session creation, validation, pairing, citations, evidence, receipt, mobile and authorization checks |
 | Fresh paid CLI run, r11 | One $0.50 test purchase; correct 60 → 30 settings answer; unrelated deletion query returned no evidence and no citations |
 | Two different source videos | Settings evidence at **40–48 s**; talk deadline evidence at **22–31.44 s** |

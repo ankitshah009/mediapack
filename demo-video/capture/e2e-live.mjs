@@ -1,11 +1,20 @@
 // End-to-end browser test against the LIVE deployment, from a fresh profile (what a judge sees).
-// Run from demo-video/:  PAIR_CODE=$(node ../scripts/mediapack.mjs pair | jq -r .code) npm run e2e:live
-// Uses one frame from the paid talk pack (section D). Exits non-zero on any failure.
-import { chromium } from "playwright";
+// Focused fresh pack only: RUN_DEMO_PAY=1 MEDIAPACK_URL=https://DEPLOYED_ORIGIN npm run e2e:live -- --demo-only
+// RUN_DEMO_PAY bypasses every historical fixed-ID section and never spends the old talk pack's allowance.
+// The legacy suite uses PAIR_CODE/.cache/pair-code; section D additionally requires RUN_LEGACY_EXTRACTION=1.
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-const O = "https://mediapack-mediapack.preview.bl.run";
+if (process.argv.includes("--demo-readonly")) {
+  const { refreshDemoAgentScreenshots } = await import("./demo-agent-proof.mjs");
+  process.exit(await refreshDemoAgentScreenshots());
+}
+if (process.env.RUN_DEMO_PAY === "1" || process.argv.includes("--demo-only")) {
+  const { runDemoAgentProof } = await import("./demo-agent-proof.mjs");
+  process.exit(await runDemoAgentProof());
+}
+const { chromium } = await import("playwright");
+const O = new URL(process.env.MEDIAPACK_URL ?? "https://mediapack-mediapack.preview.bl.run").origin;
 const SETTINGS_JOB = "bb641bda-2ca7-492e-8e8f-303414e8ec7e";
 const TALK_JOB = "d5df3fe7-5f75-4e56-87ed-bc1a0e7cbd7c";
 const results = [];
@@ -17,7 +26,7 @@ const pageErrors = [];
 const mk = async (opts = {}) => {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 }, ...opts });
   const page = await ctx.newPage();
-  page.on("pageerror", (e) => pageErrors.push(`${page.url()} :: ${e.message}`));
+    page.on("pageerror", () => pageErrors.push(true));
   return { ctx, page };
 };
 
@@ -104,6 +113,7 @@ try {
     check("C10 no [object Object] anywhere", !/\[object Object\]/.test(body));
 
     // ── D. Real extraction on the live system: one frame from the paid talk pack (Primitive → Blaxel worker → Storage)
+    if (process.env.RUN_LEGACY_EXTRACTION === "1") {
     await go(page, `${O}/app/jobs/${TALK_JOB}`);
     await page.getByText(/^Query$/i).first().waitFor({ timeout: 30000 });
     const before = (/Exported frames\s*(\d+)/.exec(await page.locator("body").innerText()) ?? [])[1];
@@ -120,6 +130,7 @@ try {
       if (after && after !== before) break;
     }
     check("D1 frame extraction completes end to end", !!after && after !== before, `exported frames ${before ?? 0} → ${after ?? "?"} in ${((Date.now() - t1) / 1000).toFixed(1)} s`);
+    }
     await ctx.close();
   }
 
@@ -137,10 +148,10 @@ try {
     check("E2 mobile upload + verification works (speech video)", mVer, `overflow ${overflowVideo}px`);
     await ctx.close();
   }
-} catch (e) {
-  check("runner", false, e.message.split("\n")[0]);
+} catch {
+  check("runner", false, "A browser step failed; raw provider and URL details are withheld.");
 } finally {
-  check("Z1 no uncaught page errors", pageErrors.length === 0, pageErrors.slice(0, 3).join(" | "));
+  check("Z1 no uncaught page errors", pageErrors.length === 0, `${pageErrors.length} uncaught page errors`);
   await browser.close();
   const failed = results.filter((r) => !r.ok);
   console.log(`\n${results.length - failed.length}/${results.length} passed`);

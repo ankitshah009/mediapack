@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Acme Gateway — Settings</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root { --bg:#f6f7f9; --panel:#fff; --line:#e3e6ea; --ink:#1d2330; --muted:#6b7380; --accent:#2f6fec; --ok:#1f9d55; }
+  * { box-sizing: border-box; }
+  body { margin:0; font: 15px/1.45 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color:var(--ink); background:var(--bg); }
+  header { height:56px; display:flex; align-items:center; gap:16px; padding:0 24px; background:#141a26; color:#fff; }
+  header .logo { font-weight:700; letter-spacing:.2px; }
+  header .env { font-size:12px; padding:2px 8px; border-radius:10px; background:#2b3446; color:#c9d3e6; }
+  header .user { margin-left:auto; font-size:13px; color:#c9d3e6; }
+  .layout { display:flex; min-height:calc(100vh - 56px); }
+  nav { width:220px; background:var(--panel); border-right:1px solid var(--line); padding:16px 0; }
+  nav a { display:block; padding:9px 24px; color:var(--ink); text-decoration:none; }
+  nav a.active { background:#eaf1ff; color:var(--accent); font-weight:600; border-left:3px solid var(--accent); padding-left:21px; }
+  main { flex:1; padding:28px 36px; max-width:900px; }
+  h1 { font-size:22px; margin:0 0 4px; }
+  .sub { color:var(--muted); margin:0 0 24px; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:22px 24px; margin-bottom:18px; }
+  .card h2 { font-size:16px; margin:0 0 14px; }
+  .row { display:grid; grid-template-columns: 200px 1fr; gap:14px; align-items:center; margin-bottom:14px; }
+  .row label { font-weight:600; font-size:14px; }
+  .row .hint { grid-column:2; color:var(--muted); font-size:12.5px; margin-top:-8px; }
+  input[type=text], input[type=number], select { font:inherit; padding:8px 10px; border:1px solid #cfd5dc; border-radius:7px; width:280px; background:#fff; }
+  input:focus, select:focus { outline:2px solid #b7cdfa; border-color:var(--accent); }
+  .toggle { display:flex; gap:8px; align-items:center; }
+  .actions { display:flex; gap:12px; align-items:center; margin-top:8px; }
+  button { font:inherit; padding:9px 18px; border-radius:7px; border:1px solid #cfd5dc; background:#fff; cursor:pointer; }
+  button.primary { background:var(--accent); color:#fff; border-color:var(--accent); font-weight:600; }
+  .saved { color:var(--ok); font-weight:600; opacity:0; transition:opacity .2s; }
+  .saved.show { opacity:1; }
+  table { width:100%; border-collapse:collapse; font-size:13.5px; }
+  th, td { text-align:left; padding:8px 6px; border-bottom:1px solid var(--line); }
+  th { color:var(--muted); font-weight:600; }
+  .pill { font-size:12px; padding:1px 8px; border-radius:9px; background:#e8f6ee; color:var(--ok); }
+  .pill.warn { background:#fff3e0; color:#b26a00; }
+  section[hidden] { display:none; }
+</style>
+</head>
+<body>
+<header>
+  <span class="logo">Acme Gateway</span>
+  <span class="env">staging</span>
+  <span class="user">dana@acme.dev</span>
+</header>
+<div class="layout">
+  <nav>
+    <a href="#general" data-tab="general">General</a>
+    <a href="#connection" data-tab="connection">Connection</a>
+    <a href="#notifications" data-tab="notifications">Notifications</a>
+    <a href="#activity" data-tab="activity">Activity log</a>
+  </nav>
+  <main>
+    <section id="tab-general">
+      <h1>General</h1>
+      <p class="sub">Workspace name, region and defaults.</p>
+      <div class="card">
+        <h2>Workspace</h2>
+        <div class="row"><label for="ws-name">Workspace name</label><input id="ws-name" type="text" value="acme-staging"></div>
+        <div class="row"><label for="region">Region</label>
+          <select id="region"><option>us-east-1</option><option>eu-west-1</option><option>ap-south-1</option></select></div>
+        <div class="row"><label for="tz">Time zone</label>
+          <select id="tz"><option>UTC</option><option>America/Los_Angeles</option><option>Europe/Berlin</option></select></div>
+      </div>
+    </section>
+
+    <section id="tab-connection" hidden>
+      <h1>Connection settings</h1>
+      <p class="sub">How the gateway talks to your upstream API.</p>
+      <div class="card">
+        <h2>Upstream</h2>
+        <div class="row"><label for="host">Upstream host</label><input id="host" type="text" value="api.internal.acme.dev"></div>
+        <div class="row"><label for="port">Port</label><input id="port" type="number" value="443"></div>
+        <div class="row"><label for="timeout">Request timeout (seconds)</label><input id="timeout" type="number" min="1" max="600"></div>
+        <div class="hint row"><span class="hint">Requests slower than this are cancelled and retried.</span></div>
+        <div class="row"><label for="retries">Max retries</label><input id="retries" type="number" value="3"></div>
+        <div class="row"><label>Keep-alive</label><span class="toggle"><input id="keepalive" type="checkbox" checked> <span>Reuse connections</span></span></div>
+        <div class="actions">
+          <button class="primary" id="save">Save</button>
+          <button id="reset">Discard</button>
+          <span class="saved" id="saved">&#10003; Saved</span>
+        </div>
+      </div>
+    </section>
+
+    <section id="tab-notifications" hidden>
+      <h1>Notifications</h1>
+      <p class="sub">Who gets alerted when upstream calls fail.</p>
+      <div class="card">
+        <h2>Alerts</h2>
+        <div class="row"><label>Email on failure</label><span class="toggle"><input id="n-email" type="checkbox" checked> <span>ops@acme.dev</span></span></div>
+        <div class="row"><label>Slack on timeout</label><span class="toggle"><input id="n-slack" type="checkbox"> <span>#gateway-alerts</span></span></div>
+        <div class="row"><label for="n-threshold">Error threshold (%)</label><input id="n-threshold" type="number" value="5"></div>
+      </div>
+    </section>
+
+    <section id="tab-activity" hidden>
+      <h1>Activity log</h1>
+      <p class="sub">Recent upstream requests.</p>
+      <div class="card">
+        <table>
+          <thead><tr><th>Time</th><th>Route</th><th>Status</th><th>Latency</th></tr></thead>
+          <tbody id="log"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+</div>
+<script>
+  // --- tabs -------------------------------------------------------------
+  function show(tab) {
+    for (const s of document.querySelectorAll("main section")) s.hidden = s.id !== "tab-" + tab;
+    for (const a of document.querySelectorAll("nav a")) a.classList.toggle("active", a.dataset.tab === tab);
+  }
+  window.addEventListener("hashchange", () => show(location.hash.slice(1) || "general"));
+  show(location.hash.slice(1) || "general");
+
+  // --- activity log (static sample data) --------------------------------
+  const rows = [
+    ["14:02:11", "GET /v1/orders", "200", "212 ms"], ["14:02:14", "POST /v1/orders", "201", "388 ms"],
+    ["14:02:20", "GET /v1/inventory", "200", "1.9 s"], ["14:02:31", "GET /v1/reports/daily", "504", "30.0 s"],
+    ["14:02:45", "GET /v1/reports/daily", "504", "30.0 s"], ["14:03:02", "GET /v1/users/me", "200", "96 ms"],
+    ["14:03:09", "POST /v1/exports", "202", "640 ms"], ["14:03:40", "GET /v1/reports/weekly", "504", "30.0 s"],
+  ];
+  document.getElementById("log").innerHTML = rows.map(([t, r, s, l]) =>
+    `<tr><td>${t}</td><td>${r}</td><td><span class="pill ${s >= 500 ? "warn" : ""}">${s}</span></td><td>${l}</td></tr>`).join("");
+
+  // --- connection settings persistence ----------------------------------
+  // BUG (intentional fixture): save() writes "gateway.requestTimeout" but load()
+  // reads "gateway.request_timeout", so after a refresh the field falls back to 30.
+  const DEFAULT_TIMEOUT = 30;
+  const timeout = document.getElementById("timeout");
+  function load() {
+    const v = sessionStorage.getItem("gateway.request_timeout");
+    timeout.value = v ?? DEFAULT_TIMEOUT;
+  }
+  function save() {
+    sessionStorage.setItem("gateway.requestTimeout", String(timeout.value));
+    const s = document.getElementById("saved");
+    s.classList.add("show");
+    setTimeout(() => s.classList.remove("show"), 4000);
+  }
+  document.getElementById("save").addEventListener("click", save);
+  document.getElementById("reset").addEventListener("click", load);
+  load();
+</script>
+</body>
+</html>

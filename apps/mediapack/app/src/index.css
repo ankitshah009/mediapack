@@ -1,0 +1,13 @@
+@import "tailwindcss";
+@import "./tokens.css";
+/* Tailwind v4 auto-detects sources from the CSS file location (app/src); shared components live in the same tree. */
+
+html { color-scheme: light dark; }
+body { background: var(--paper); color: var(--text); font-family: var(--font-sans); -webkit-font-smoothing: antialiased; }
+:focus-visible { outline: 2px solid var(--stripe); outline-offset: 2px; }
+.rail :focus-visible, .on-lime:focus-visible { outline-color: var(--lime); }
+@keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.animate-rise { animation: rise 280ms cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+@keyframes pulse-dot { 0%,100% { opacity: 1 } 50% { opacity: .35 } }
+.pulse-dot { animation: pulse-dot 1.4s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .animate-rise, .pulse-dot { animation: none; } }

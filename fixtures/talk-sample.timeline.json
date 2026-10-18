@@ -1,0 +1,35 @@
+{
+  "video": "talk-sample.mp4",
+  "voice": "Samantha",
+  "duration_ms": 45858,
+  "slides": [
+    {
+      "slide": 1,
+      "speech_start_ms": 1000,
+      "speech_end_ms": 9256,
+      "text": "Welcome everyone to the Agent Commerce Hackathon. This weekend you will build software that agents can discover, pay for, and use on their own.",
+      "slide_shown_ms": 163
+    },
+    {
+      "slide": 2,
+      "speech_start_ms": 10056,
+      "speech_end_ms": 20468,
+      "text": "There are three tracks. Primitive plus Stripe covers agent payments and messaging. Manufact is for shipping an MCP server. And the overall winner gets a Y Combinator interview.",
+      "slide_shown_ms": 9665
+    },
+    {
+      "slide": 3,
+      "speech_start_ms": 21268,
+      "speech_end_ms": 30637,
+      "text": "The most important slide. Submissions are due Sunday at ten A M. You need a GitHub repository link and a two minute demo video. Late submissions will not be judged.",
+      "slide_shown_ms": 20875
+    },
+    {
+      "slide": 4,
+      "speech_start_ms": 31437,
+      "speech_end_ms": 44058,
+      "text": "Finally, logistics. The Wi-Fi network is hack guest, and the password is on your badge. Dinner is at seven P M on the second floor. Judging starts Sunday at eleven, and finalists present at two P M.",
+      "slide_shown_ms": 31055
+    }
+  ]
+}

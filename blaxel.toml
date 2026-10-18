@@ -1,0 +1,20 @@
+# Next.js dashboard and REST API via a Blaxel sandbox public preview.
+# Applications is gated for this workspace; no Application entitlement is needed here.
+name = "mediapack-web"
+type = "sandbox"
+
+[runtime]
+memory = 2048
+
+[[runtime.ports]]
+name = "nextjs"
+target = 3000
+protocol = "HTTP"
+
+[env]
+NODE_ENV = "production"
+HOSTNAME = "0.0.0.0"
+PORT = "3000"
+PAYMENTS_MODE = "test"
+MEDIAPACK_HOST_MODE = "sandbox"
+BL_SANDBOX_USER_ENABLED = "true"

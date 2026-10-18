@@ -1,0 +1,4 @@
+node_modules/
+.mcp-use/
+.env*
+!.env.example

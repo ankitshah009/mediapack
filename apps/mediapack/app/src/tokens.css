@@ -1,0 +1,83 @@
+/* MediaPack design tokens — shared by the standalone app and the MCP view.
+   Warm paper canvas, ink rail, chartreuse primary, violet payment accents. */
+:root,
+[data-theme="light"] {
+  --paper: #f3f1ea;
+  --card: #fbfaf6;
+  --ink: #12130f;
+  --text: #12130f;
+  --muted: #5f5e56;
+  --line: rgb(18 19 15 / 0.12);
+  --rail: #0e0f0c;
+  --rail-text: #d9d8cf;
+  --lime: #d4f25a;
+  --lime-ink: #1b2400;
+  --stripe: #635bff;
+  --stripe-soft: rgb(99 91 255 / 0.1);
+  --primitive: #0b7f77;
+  --worker: #a96500;
+  --danger: #b42318;
+  --danger-soft: rgb(180 35 24 / 0.08);
+  --ok: #3f6b00;
+  --ok-soft: rgb(120 170 20 / 0.16);
+  --code: #0e0f0c;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #0f100d;
+    --card: #171814;
+    --text: #ecebe3;
+    --muted: #a3a298;
+    --line: rgb(236 235 227 / 0.12);
+    --stripe: #8f89ff;
+    --stripe-soft: rgb(143 137 255 / 0.14);
+    --primitive: #2fc4b8;
+    --worker: #e9a63a;
+    --danger: #ff8a7e;
+    --danger-soft: rgb(255 138 126 / 0.1);
+    --ok: #c4e55a;
+    --ok-soft: rgb(212 242 90 / 0.12);
+    --code: #090a08;
+  }
+}
+[data-theme="dark"] {
+  --paper: #0f100d;
+  --card: #171814;
+  --text: #ecebe3;
+  --muted: #a3a298;
+  --line: rgb(236 235 227 / 0.12);
+  --stripe: #8f89ff;
+  --stripe-soft: rgb(143 137 255 / 0.14);
+  --primitive: #2fc4b8;
+  --worker: #e9a63a;
+  --danger: #ff8a7e;
+  --danger-soft: rgb(255 138 126 / 0.1);
+  --ok: #c4e55a;
+  --ok-soft: rgb(212 242 90 / 0.12);
+  --code: #090a08;
+}
+
+@theme inline {
+  --color-paper: var(--paper);
+  --color-card: var(--card);
+  --color-ink: var(--ink);
+  --color-text: var(--text);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-rail: var(--rail);
+  --color-rail-text: var(--rail-text);
+  --color-lime: var(--lime);
+  --color-lime-ink: var(--lime-ink);
+  --color-stripe: var(--stripe);
+  --color-stripe-soft: var(--stripe-soft);
+  --color-primitive: var(--primitive);
+  --color-worker: var(--worker);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-ok: var(--ok);
+  --color-ok-soft: var(--ok-soft);
+  --color-code: var(--code);
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Inter Tight", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}

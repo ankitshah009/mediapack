@@ -1,0 +1,53 @@
+{
+  "video": "settings-reset.mp4",
+  "events": [
+    {
+      "t_ms": 149,
+      "event": "open_general"
+    },
+    {
+      "t_ms": 5159,
+      "event": "general_region_changed"
+    },
+    {
+      "t_ms": 10149,
+      "event": "open_notifications"
+    },
+    {
+      "t_ms": 18443,
+      "event": "open_activity"
+    },
+    {
+      "t_ms": 29160,
+      "event": "open_connection"
+    },
+    {
+      "t_ms": 36502,
+      "event": "timeout_set_60"
+    },
+    {
+      "t_ms": 39242,
+      "event": "save_clicked"
+    },
+    {
+      "t_ms": 39247,
+      "event": "saved_visible"
+    },
+    {
+      "t_ms": 45139,
+      "event": "reload"
+    },
+    {
+      "t_ms": 45185,
+      "event": "after_reload_value_30"
+    },
+    {
+      "t_ms": 47592,
+      "event": "hover_timeout_30"
+    },
+    {
+      "t_ms": 53596,
+      "event": "end"
+    }
+  ]
+}

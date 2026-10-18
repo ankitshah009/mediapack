@@ -1,0 +1,16 @@
+.mp-view { color-scheme: light dark; --paper: #f8faf8; --ink: #17241d; --line: #d5ded7; --muted: #53645a; background: var(--paper); color: var(--ink); font: 14px/1.5 ui-sans-serif, system-ui, sans-serif; padding: 20px; border: 1px solid var(--line); border-radius: 16px; overflow-wrap: anywhere; }
+.mp-view[data-theme="dark"] { --paper: #101a15; --ink: #eef5ef; --line: #344b3d; --muted: #bed0c3; }
+.mp-view h1 { font-size: 20px; margin: 12px 0; }
+.mp-view h2 { font-size: 15px; margin: 20px 0 8px; }
+.mp-view p { margin: 8px 0; }
+.mp-view small, .mp-view figcaption { color: var(--muted); }
+.mp-badges { display: flex; flex-wrap: wrap; gap: 8px; }
+.mp-badges span { border: 1px solid var(--line); border-radius: 20px; padding: 2px 9px; font-size: 12px; }
+.mp-matches { list-style: none; padding: 0; }
+.mp-matches li { padding: 12px; border: 1px solid var(--line); border-radius: 10px; margin: 8px 0; }
+.mp-view blockquote { margin: 8px 0; padding-left: 12px; border-left: 2px solid var(--line); }
+.mp-artifacts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr)); gap: 12px; }
+.mp-artifacts figure { margin: 0; }
+.mp-artifacts img, .mp-artifacts video { display: block; max-width: 100%; border-radius: 8px; }
+.mp-artifacts figcaption { font-size: 12px; padding-top: 4px; }
+.mp-view a:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }

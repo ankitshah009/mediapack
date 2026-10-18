@@ -1,0 +1,6 @@
+/* Own Tailwind root so the MediaPack @theme tokens generate utilities (bg-card, text-muted, ...). */
+@import "tailwindcss";
+@import "../../app/src/tokens.css";
+@source "../../app/src/components";
+
+.mp-view { font-family: var(--font-sans); background: var(--paper); color: var(--text); }

@@ -1,0 +1,8 @@
+name = "mediapack-worker"
+type = "sandbox"
+
+[runtime]
+memory = 4096
+
+[env]
+BL_SANDBOX_USER_ENABLED = "true"

@@ -1,0 +1,56 @@
+{
+  "name": "mediapack",
+  "type": "module",
+  "engines": {
+    "node": ">=22.22.2"
+  },
+  "version": "1.0.0",
+  "description": "an mcp-use server with React views for MCP Apps",
+  "author": "mcp-use",
+  "license": "MIT",
+  "homepage": "https://github.com/mcp-use/mcp-use",
+  "keywords": [
+    "mcp",
+    "mcp-server",
+    "chatgpt plugins",
+    "claude connector",
+    "mcp-app",
+    "mcp-use",
+    "manufact"
+  ],
+  "scripts": {
+    "build": "npm run build:app && mcp-use build",
+    "build:app": "vite build --config app/vite.config.ts",
+    "dev:app": "vite --config app/vite.config.ts",
+    "typecheck:app": "tsc --noEmit -p app/tsconfig.json",
+    "dev": "mcp-use dev",
+    "start": "mcp-use start",
+    "deploy": "mcp-use deploy",
+    "typecheck": "mcp-use typecheck",
+    "test": "node --import tsx --test tests/*.test.ts"
+  },
+  "dependencies": {
+    "@blaxel/core": "0.3.30",
+    "@primitivedotdev/sdk": "2.4.0",
+    "@supabase/supabase-js": "^2.118.0",
+    "hono": "4.13.13",
+    "mcp-use": "2.10.1",
+    "mppx": "^0.13.5",
+    "postgres": "3.4.9",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "stripe": "^23.0.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "4.3.3",
+    "@types/node": "^22.20.0",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "6.0.5",
+    "tailwindcss": "4.3.3",
+    "tsx": "4.23.15",
+    "typescript": "^7.0.2",
+    "vite": "8.0.16"
+  }
+}

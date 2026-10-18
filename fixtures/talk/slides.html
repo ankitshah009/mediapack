@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Agent Commerce Hackathon — Kickoff</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin:0; width:1280px; height:720px; overflow:hidden; font-family:-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; background:#0f1420; color:#eef2f8; }
+  .slide { position:absolute; inset:0; padding:72px 96px; display:none; flex-direction:column; }
+  .slide.on { display:flex; }
+  .kicker { color:#7aa2ff; font-weight:700; letter-spacing:.12em; text-transform:uppercase; font-size:18px; }
+  h1 { font-size:60px; margin:18px 0 12px; line-height:1.05; }
+  h2 { font-size:44px; margin:14px 0 28px; }
+  p, li { font-size:28px; line-height:1.45; color:#c8d2e4; }
+  ul { margin:0; padding-left:34px; }
+  .big { font-size:96px; font-weight:800; color:#ffd166; margin:12px 0; }
+  .foot { margin-top:auto; font-size:18px; color:#7d889c; display:flex; justify-content:space-between; }
+  table { border-collapse:collapse; font-size:26px; }
+  td { padding:10px 28px 10px 0; border-bottom:1px solid #2a3348; }
+  td:first-child { color:#7aa2ff; font-weight:700; }
+</style>
+</head>
+<body>
+<section class="slide" id="s1">
+  <div class="kicker">Kickoff · Saturday</div>
+  <h1>Agent Commerce<br>Hackathon</h1>
+  <p>Build software that agents can discover, pay for, and use on their own.</p>
+  <div class="foot"><span>Welcome</span><span>1 / 4</span></div>
+</section>
+<section class="slide" id="s2">
+  <div class="kicker">Tracks</div>
+  <h2>Three tracks, one overall prize</h2>
+  <table>
+    <tr><td>Primitive + Stripe</td><td>Agent-to-agent payments and messaging</td></tr>
+    <tr><td>Manufact</td><td>Ship an MCP server agents actually use</td></tr>
+    <tr><td>Overall</td><td>Winner gets a YC interview</td></tr>
+  </table>
+  <div class="foot"><span>Tracks</span><span>2 / 4</span></div>
+</section>
+<section class="slide" id="s3">
+  <div class="kicker">Deadline</div>
+  <h2>Submissions are due</h2>
+  <div class="big">Sunday 10:00 AM</div>
+  <ul><li>GitHub repository link</li><li>Two-minute demo video</li><li>Late submissions are not judged</li></ul>
+  <div class="foot"><span>Deadline</span><span>3 / 4</span></div>
+</section>
+<section class="slide" id="s4">
+  <div class="kicker">Logistics</div>
+  <h2>Food, Wi-Fi and judging</h2>
+  <ul><li>Wi-Fi: network <b>hack-guest</b>, password on your badge</li><li>Dinner at 7 PM on the second floor</li><li>Judging starts Sunday at 11 AM, finalists present at 2 PM</li></ul>
+  <div class="foot"><span>Logistics</span><span>4 / 4</span></div>
+</section>
+<script>
+  function go(n) { for (const s of document.querySelectorAll(".slide")) s.classList.toggle("on", s.id === "s" + n); }
+  go(1);
+</script>
+</body>
+</html>

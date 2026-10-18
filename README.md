@@ -20,6 +20,12 @@ In the project team's initial hands-on evaluation, Primitive was slightly more r
 
 ## How it works
 
+![MediaPack architecture: agent clients (CLI or MCP on Manufact) and the browser dashboard call the Next.js API on Blaxel; Stripe MPP handles the HTTP 402 purchase; Supabase holds jobs, payments, allowance, outbox and private media; Primitive carries each work order and result as email; a Blaxel worker per operation runs ffmpeg, whisper.cpp and a vision model through the Blaxel gateway](docs/images/architecture.png)
+
+![One paid question, end to end: upload and verify, quote and HTTP 402 payment, reserve and write the outbox, email the work order over Primitive, deliver and launch a Blaxel worker, index the video, reply and verify and commit, then ask, cite and retrieve](docs/images/job-flow.png)
+
+Both images are rendered from React source in [`demo-video/src/Architecture.tsx`](demo-video/src/Architecture.tsx) and [`demo-video/src/JobFlow.tsx`](demo-video/src/JobFlow.tsx); regenerate them with `cd demo-video && npx remotion still src/index.ts ArchitectureImage ../docs/images/architecture.png` (and `JobFlowImage … job-flow.png`). Every work order and result is a real email in one Primitive thread per operation (subject `[mp:<operation>:g<generation>] <action>`), so the exchange stays retrievable through Primitive's email API after the job finishes, while Postgres keeps the authoritative job, payment and allowance state.
+
 ### System topology
 
 Every client calls the same service operations in `apps/mediapack/src`. Media bytes go straight to Storage and never pass through the API or MCP process. The worker never holds the Supabase service role or the merchant Stripe key.
@@ -39,7 +45,8 @@ flowchart LR
   subgraph Blaxel
     W[apps/web<br/>Next.js dashboard + REST<br/>/v1 /health /webhooks /internal/tick]
     S[apps/mediapack/src<br/>shared services, contracts, adapters]
-    K[worker sandbox<br/>Node + ffmpeg, 4 GiB, bounded]
+    K[worker sandbox per operation<br/>ffmpeg + whisper.cpp, 4 GiB, bounded]
+    G[Blaxel model gateway<br/>vision, short-lived token]
   end
 
   subgraph Supabase
@@ -57,10 +64,13 @@ flowchart LR
   S --> DB
   B & C -.signed upload.-> ST
   S <-->|402 challenge, verify, webhook| ST2
-  S -->|work request| P -->|webhook| W
-  P -->|launch / deliver| K
-  K -->|work_result| P
-  K -.scoped artifact access.-> ST
+  S -->|work order email| P
+  P -->|signed webhooks| W
+  S -->|launch after delivery| K
+  K -->|result reply email| P
+  K -.signed Storage URLs.-> ST
+  K -->|vision| G
+  DB -.pg_cron recovery tick.-> W
 ```
 
 ### One purchase, end to end
@@ -87,11 +97,12 @@ sequenceDiagram
   U->>SP: pay (mppx or Link)
   SP-->>API: verified PaymentIntent (sync and/or webhook)
   API->>DB: apply_verified_payment → job active + index_video op + outbox row
-  API->>PR: send outbox message (stable Idempotency-Key)
-  PR->>WK: work request
-  WK->>ST: write frames / transcript / index artifacts
-  WK->>PR: work_result (artifact IDs + hashes)
-  PR->>API: POST /webhooks/primitive (signed)
+  API->>PR: email the work order (stable Idempotency-Key)
+  PR->>API: POST /webhooks/primitive (signed, work delivered)
+  API->>WK: launch a Blaxel worker for that operation
+  WK->>ST: signed URLs: read source, write frames / transcript / index
+  WK->>PR: reply email: work_result (artifact IDs + hashes)
+  PR->>API: POST /webhooks/primitive (signed, result)
   API->>DB: persist event, verify, commit result, append events
   U->>API: search / frames / clip → 202 + operation
   API->>DB: reserve_operation (consume_allowance in SQL)
@@ -106,8 +117,9 @@ No network call happens inside a database transaction. Every side effect is writ
 flowchart TD
   R[API request or verified payment] -->|one SQL transaction| T[(operation row<br/>+ allowance reservation<br/>+ outbox row with payload hash)]
   T --> D{/internal/tick or inline dispatch<br/>claim_outbox_batch<br/>FOR UPDATE SKIP LOCKED}
-  D -->|send, same key + payload on retry| P[Primitive]
-  P --> W[Worker runs action<br/>probe / index / search / frames / clip]
+  D -->|email, same key + payload on retry| P[Primitive]
+  P -->|signed webhook: work delivered| L[API launches one Blaxel worker]
+  L --> W[Worker runs action<br/>probe / index / search / frames / clip]
   W -->|work_result| H[/webhooks/primitive/]
   H -->|verify signature, unique event ID| I[(provider_events inbox)]
   I --> C{Matches operation,<br/>generation, nonce?}

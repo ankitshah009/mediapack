@@ -31,46 +31,43 @@ Both images are rendered from React source in [`demo-video/src/Architecture.tsx`
 Every client calls the same service operations in `apps/mediapack/src`. Media bytes go straight to Storage and never pass through the API or MCP process. The worker never holds the Supabase service role or the merchant Stripe key.
 
 ```mermaid
-flowchart LR
-  subgraph Clients
-    B[Browser viewer<br/>/app]
-    C[Buyer CLI<br/>scripts/mediapack.mjs]
-    A[Agent via MCP]
+flowchart TB
+  subgraph clients["Clients"]
+    direction LR
+    A["Agent CLI<br/>scripts/mediapack.mjs"]
+    M["Agent via MCP<br/>apps/mcp on Manufact"]
+    B["Browser dashboard<br/>/app"]
   end
 
-  subgraph Manufact
-    M[apps/mcp<br/>mcp-use proxy]
+  API["MediaPack API · Next.js on Blaxel<br/>apps/web + apps/mediapack/src<br/>REST /v1 · webhooks · /internal/tick"]
+
+  subgraph state["Supabase"]
+    direction LR
+    DB[("Postgres<br/>jobs · payments · allowance<br/>outbox · events")]
+    ST[("Private Storage<br/>videos · indexes · artifacts")]
   end
 
-  subgraph Blaxel
-    W[apps/web<br/>Next.js dashboard + REST<br/>/v1 /health /webhooks /internal/tick]
-    S[apps/mediapack/src<br/>shared services, contracts, adapters]
-    K[worker sandbox per operation<br/>ffmpeg + whisper.cpp, 4 GiB, bounded]
-    G[Blaxel model gateway<br/>vision, short-lived token]
+  S["Stripe MPP · test mode<br/>HTTP 402 · PaymentIntent check"]
+  P["Primitive<br/>work order + result emails"]
+
+  subgraph blaxel["Blaxel workers"]
+    direction LR
+    W["Worker sandbox per operation<br/>ffmpeg · whisper.cpp · 4 GiB"]
+    G["Model gateway<br/>vision · short-lived token"]
   end
 
-  subgraph Supabase
-    DB[(Postgres<br/>videos, quotes, jobs,<br/>operations, outbox, events)]
-    ST[(Private Storage<br/>mediapack-private)]
-  end
-
-  ST2[Stripe test mode<br/>MPP / PaymentIntent]
-  P[Primitive<br/>managed mail transport]
-
-  A --> M -->|forwards capability| W
-  B --> W
-  C --> W
-  W --- S
-  S --> DB
-  B & C -.signed upload.-> ST
-  S <-->|402 challenge, verify, webhook| ST2
-  S -->|work order email| P
-  P -->|signed webhooks| W
-  S -->|launch after delivery| K
-  K -->|result reply email| P
-  K -.signed Storage URLs.-> ST
-  K -->|vision| G
-  DB -.pg_cron recovery tick.-> W
+  A -->|REST| API
+  M -->|forwards caller capability| API
+  B -->|same job, live| API
+  API <-->|402 · verify · webhook| S
+  API <-->|SQL state · signed URLs| DB
+  DB -.->|pg_cron recovery tick| API
+  API -->|work order email| P
+  P -->|signed webhooks| API
+  API -->|launch after delivery| W
+  W -->|result reply email| P
+  W -.->|signed URLs| ST
+  W -->|vision| G
 ```
 
 ### One purchase, end to end
@@ -106,7 +103,7 @@ sequenceDiagram
   API->>DB: persist event, verify, commit result, append events
   U->>API: search / frames / clip → 202 + operation
   API->>DB: reserve_operation (consume_allowance in SQL)
-  Note over U,API: Client polls GET /v1/jobs/:id; UI renders only persisted events
+  Note over U,DB: Client polls GET /v1/jobs/:id — the UI renders only persisted events
 ```
 
 ### Durable work pipeline
@@ -120,7 +117,7 @@ flowchart TD
   D -->|email, same key + payload on retry| P[Primitive]
   P -->|signed webhook: work delivered| L[API launches one Blaxel worker]
   L --> W[Worker runs action<br/>probe / index / search / frames / clip]
-  W -->|work_result| H[/webhooks/primitive/]
+  W -->|work_result| H["POST /webhooks/primitive"]
   H -->|verify signature, unique event ID| I[(provider_events inbox)]
   I --> C{Matches operation,<br/>generation, nonce?}
   C -->|yes| OK[commit result + events<br/>→ job / operation succeeded]
@@ -151,16 +148,14 @@ stateDiagram-v2
 
 ```mermaid
 flowchart LR
-  root((mediapack))
-  root --> web[apps/web<br/>Next.js App Router UI + API routes]
-  root --> core[apps/mediapack/src<br/>services · contracts · adapters · routes · tools]
-  root --> mcp[apps/mcp<br/>MCP tools → REST]
-  root --> wk[worker/src<br/>actions · media · models · local-asr]
-  root --> sb[supabase<br/>migrations/0001_init.sql · tests/invariants.sql]
-  root --> sc[scripts<br/>buyer CLI · setup-supabase · setup-primitive · deploy/host Blaxel]
-  root --> dc[docs<br/>setup · verification · release checklist · costs]
-  web -->|relative import| core
-  mcp -->|HTTP| web
+  scripts["scripts/<br/>buyer CLI · setup · deploy"] -->|REST| web
+  mcp["apps/mcp<br/>MCP tools · Manufact"] -->|HTTP| web["apps/web<br/>Next.js UI + API · Blaxel"]
+  web -->|relative import| core["apps/mediapack/src<br/>services · contracts · adapters"]
+  core -->|SQL| sb["supabase/<br/>migrations · invariants"]
+  core -->|work order email · Primitive| worker["worker/src<br/>ffmpeg · whisper.cpp · vision"]
+  video["demo-video/<br/>Remotion video + README images"]
+  docs["docs/<br/>setup · verification · images"]
+  video -->|renders README images| docs
 ```
 
 ## Local setup

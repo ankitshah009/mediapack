@@ -49,10 +49,24 @@ export async function createVideo(ctx: Ctx, clientId: string, input: z.infer<typ
   const video = videoView(row, await latestJobId(ctx, id));
   let upload = null;
   if (row.state === "uploading") {
-    const u = await ctx.storage.createUpload(row.object_key, input.content_type);
-    upload = { method: u.method, url: u.url, headers: u.headers, expires_at: new Date(Math.min(Date.now() + u.expires_in_seconds * 1000, new Date(row.upload_expires_at).getTime() + 3600_000)).toISOString() };
+    // A retry after a successful PUT must resume completion, not mint an overwrite grant.
+    const stored = created ? null : await ctx.storage.stat(row.object_key);
+    if (!stored) {
+      try {
+        const u = await ctx.storage.createUpload(row.object_key, input.content_type);
+        upload = { method: u.method, url: u.url, headers: u.headers, expires_at: new Date(Math.min(Date.now() + u.expires_in_seconds * 1000, new Date(row.upload_expires_at).getTime() + 3600_000)).toISOString() };
+      } catch (error) {
+        // The first PUT can finish after stat but before Supabase checks immutability.
+        if (!(await ctx.storage.stat(row.object_key))) throw error;
+      }
+    }
   }
-  return { created, body: { video_id: id, state: video.state, upload, video, next_action: "PUT the file to upload.url with upload.headers, then call complete_upload." } };
+  const next_action = upload
+    ? "PUT the file to upload.url with upload.headers, then call complete_upload."
+    : row.state === "uploading"
+      ? "The source is already uploaded; call complete_upload."
+      : "Call get_video to check the existing video state.";
+  return { created, body: { video_id: id, state: video.state, upload, video, next_action } };
 }
 
 export async function completeUpload(ctx: Ctx, clientId: string, videoId: string) {

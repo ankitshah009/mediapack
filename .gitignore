@@ -26,6 +26,7 @@ coverage/
 .projects/vault
 .projects/state.test.json
 .projects/state.local.test.json
+supabase/.temp/
 .env
 .env.*
 !.env.example

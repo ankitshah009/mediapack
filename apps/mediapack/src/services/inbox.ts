@@ -130,8 +130,17 @@ async function launchFromRequest(ctx: Ctx, mail: StoredMail, body: unknown, opId
       worker_token: signWorkerToken(ctx, { op: opId, gen, video_id: op.video_id }),
       control_base_url: ctx.cfg.publicOrigin,
     });
-    await ctx.sql`update operations set sandbox_name = ${launched.sandboxName}, process_name = ${launched.processName} where id = ${opId}::uuid and generation = ${gen}`;
-    return { state: "applied", detail: `launched ${launched.sandboxName}` };
+    const recorded = await ctx.sql.begin(async (tx) => {
+      const [current] = await tx`
+        update operations set sandbox_name = ${launched.sandboxName}, process_name = ${launched.processName}
+        where id = ${opId}::uuid and generation = ${gen}
+        returning video_id, job_id, kind`;
+      if (!current) return false;
+      await tx`select app_event(${current.video_id}::uuid, ${current.job_id}::uuid, ${opId}::uuid, 'worker.launched',
+        ${tx.json({ kind: current.kind, sandbox: launched.sandboxName, process: launched.processName, generation: gen })})`;
+      return true;
+    });
+    return { state: "applied", detail: recorded ? `launched ${launched.sandboxName}` : "launch returned after its generation was superseded" };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     console.error(`[launch ${opId}] failed: ${msg}`);

@@ -9,27 +9,58 @@ import { resolve } from 'node:path';
 const root = fileURLToPath(new URL('..', import.meta.url));
 const require = createRequire(new URL('../apps/mediapack/package.json', import.meta.url));
 const { SandboxInstance, settings } = require('@blaxel/core');
-const expirationPolicies = [{ type: 'ttl-idle', value: '1h', action: 'delete' }];
 class HostingError extends Error {}
 let phase = 'validate local image and environment';
 const { values } = parseArgs({ options: {
   image: { type: 'string' }, name: { type: 'string', default: 'mediapack-web' },
   workspace: { type: 'string', default: 'mediapack' }, region: { type: 'string', default: 'us-pdx-1' },
   'env-file': { type: 'string', default: 'apps/web/.env.blaxel' },
+  'idle-ttl': { type: 'string', default: '1h' },
   restart: { type: 'boolean', default: false }, help: { type: 'boolean', short: 'h' },
 } });
 
+// Keep the model alternative aligned with adapters/blaxel-launch.ts. A workspace
+// token may be sent only to that same workspace's exact HTTPS model gateway.
+function missingProviderSettings(env) {
+  const required = ['DATABASE_URL', 'SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'STRIPE_SECRET_KEY',
+    'STRIPE_WEBHOOK_SECRET', 'PRIMITIVE_API_KEY', 'PRIMITIVE_WORKER_API_KEY', 'PRIMITIVE_WEBHOOK_SECRET',
+    'PRIMITIVE_CONTROL_ADDRESS', 'PRIMITIVE_WORKER_ADDRESS', 'BLAXEL_WORKER_IMAGE'];
+  const missing = required.filter(key => !env[key]);
+  if (!env.STRIPE_PROFILE_ID && !(env.PAYMENTS_MODE === 'test' && env.STRIPE_TEST_NETWORK_ID === 'internal')) {
+    missing.push('STRIPE_PROFILE_ID or explicit STRIPE_TEST_NETWORK_ID=internal');
+  }
+  const workspace = env.BL_WORKSPACE || env.BLAXEL_PLAN_WORKSPACE;
+  if (!workspace) missing.push('BL_WORKSPACE');
+  if (!(env.BL_API_KEY || env.BLAXEL_PLAN_API_KEY || env.BL_CLIENT_CREDENTIALS)) missing.push('BL_API_KEY or BL_CLIENT_CREDENTIALS');
+  let gateway = false;
+  if (workspace && env.OPENAI_BASE_URL) {
+    try {
+      const url = new URL(env.OPENAI_BASE_URL);
+      const parts = url.pathname.replace(/\/$/, '').split('/');
+      gateway = url.origin === 'https://run.blaxel.ai' && !url.username && !url.password && !url.search && !url.hash &&
+        parts.length === 5 && parts[1] === workspace && parts[2] === 'models' &&
+        /^[a-z0-9][a-z0-9-]*$/.test(parts[3]) && parts[4] === 'v1';
+    } catch { /* An invalid URL cannot satisfy the model authentication requirement. */ }
+  }
+  if (!env.OPENAI_API_KEY && !gateway) missing.push('OPENAI_API_KEY or valid Blaxel OPENAI_BASE_URL');
+  return missing;
+}
+
 async function main() {
   if (values.help) {
-    console.log('Usage: node scripts/host-blaxel.mjs --image sandbox/mediapack-web:<immutable-tag> [--env-file apps/web/.env.blaxel] [--restart]\nCreates/reuses the web sandbox and its public preview. Runtime values stay out of build images and logs.\n--restart stops only this sandbox’s named web process before starting it with current configuration.\nUse a new --name for a new image; existing sandbox images are never silently replaced.');
+    console.log('Usage: node scripts/host-blaxel.mjs --image sandbox/mediapack-web:<immutable-tag> [--env-file apps/web/.env.blaxel] [--idle-ttl 1h..24h] [--restart]\nCreates/reuses the web sandbox and its public preview. Runtime values stay out of build images and logs.\nIdle deletion defaults to 1h; use --idle-ttl 24h to keep a demo URL through judging. Standby remains enabled.\n--restart stops only this sandbox’s named web process before starting it with current configuration.\nUse a new --name for a new image; existing sandbox images are never silently replaced.');
     return;
   }
+  const idleHours = /^([1-9]|1[0-9]|2[0-4])h$/.exec(values['idle-ttl']);
+  if (!idleHours) throw new HostingError('--idle-ttl must be a whole number of hours between 1h and 24h.');
+  const expirationPolicies = [{ type: 'ttl-idle', value: values['idle-ttl'], action: 'delete' }];
   if (!/^sandbox\/mediapack-web:[a-zA-Z0-9_.-]+$/.test(values.image ?? '') || values.image.endsWith(':latest')) {
     throw new HostingError('Supply the successfully built immutable sandbox/mediapack-web:<tag> image.');
   }
   const file = parseEnv(await readFile(resolve(root, values['env-file']), 'utf8'));
   const allowed = new Set([...Object.keys(parseEnv(await readFile(resolve(root, 'apps/web/.env.example'), 'utf8'))),
-    'MPP_SECRET_KEY', 'MCP_PUBLIC_URL', 'BL_REGION', 'OPENAI_REASONING_EFFORT', 'OPENAI_IMAGE_DETAIL']);
+    'MPP_SECRET_KEY', 'MCP_PUBLIC_URL', 'BL_REGION', 'OPENAI_REASONING_EFFORT', 'OPENAI_IMAGE_DETAIL',
+    'BLAXEL_PLAN_API_KEY', 'BLAXEL_PLAN_WORKSPACE']);
   const env = Object.fromEntries(Object.entries(file).filter(([key, value]) => allowed.has(key) && value.trim()));
   settings.setConfig({ ...settings.config, workspace: values.workspace });
   phase = 'create or retrieve the web sandbox';
@@ -46,10 +77,10 @@ async function main() {
   if (sandbox.spec.region !== values.region) throw new HostingError('Existing sandbox uses a different region. Choose a new --name.');
   // createIfNotExists preserves an existing resource, so enforce cost protection
   // on both new and previously deployed web hosts.
-  phase = 'apply the one-hour idle deletion policy';
+  phase = 'apply the bounded idle deletion policy';
   const updated = await SandboxInstance.updateLifecycle(values.name, { expirationPolicies });
-  if (!updated.spec.lifecycle?.expirationPolicies?.some(p => p.type === 'ttl-idle' && p.value === '1h' && p.action === 'delete')) {
-    throw new HostingError('Blaxel did not confirm the one-hour idle deletion policy. Check sandbox Lifecycle settings.');
+  if (!updated.spec.lifecycle?.expirationPolicies?.some(p => p.type === 'ttl-idle' && p.value === values['idle-ttl'] && p.action === 'delete')) {
+    throw new HostingError('Blaxel did not confirm the requested idle deletion policy. Check sandbox Lifecycle settings.');
   }
   phase = 'create or retrieve the public preview';
   const preview = await sandbox.previews.createIfNotExists({ metadata: { name: 'web' }, spec: { port: 3000, public: true } });
@@ -93,14 +124,12 @@ async function main() {
   const health = await fetch(`${origin}/health`, { signal: AbortSignal.timeout(30_000), redirect: 'error' });
   if (!health.ok) throw new HostingError(`Public health check returned HTTP ${health.status}.`);
   const healthBody = await health.json();
-  const required = ['DATABASE_URL', 'SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'STRIPE_SECRET_KEY', 'STRIPE_PROFILE_ID',
-    'STRIPE_WEBHOOK_SECRET', 'PRIMITIVE_API_KEY', 'PRIMITIVE_WORKER_API_KEY', 'PRIMITIVE_WEBHOOK_SECRET', 'OPENAI_API_KEY'];
   const report = { sandbox: values.name, image: values.image, origin, app_url: `${origin}/app`,
     process: processName, process_status: status.status, next_ready: ready, health_status: health.status, database: healthBody.database,
-    missing_provider_settings_in_env_file: required.filter(key => !env[key]),
+    missing_provider_settings_in_env_file: missingProviderSettings(env),
     keep_alive: status.keepAlive,
     expiration_policies: updated.spec.lifecycle.expirationPolicies,
-    lifecycle: 'automatic standby allowed; sandbox and preview deleted after 1h idle (resume/suspend-based timer)',
+    lifecycle: `automatic standby allowed; sandbox and preview deleted after ${values['idle-ttl']} idle (resume/suspend-based timer)`,
     configuration: existing && !restart ? 'Existing process reused; use --restart to apply current env values.' : 'Current env applied; PUBLIC_BASE_URL set to preview origin.',
   };
   await mkdir(resolve(root, '.blaxel'), { recursive: true, mode: 0o700 });

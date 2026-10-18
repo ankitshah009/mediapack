@@ -144,3 +144,77 @@ test("buildIndexText bounds the prompt and notes truncation", () => {
   assert.ok(b.omitted > 0 && b.ids.length + b.omitted === 500);
   assert.match(b.text, /index truncated/);
 });
+
+test("search reviews later contradictory field text and preserves nonconsecutive transition evidence", async () => {
+  const { r, calls } = await searchOver(SETTINGS, "Compare the connection limit before and after the later change", {
+    search: (text, ids) => {
+      assert.match(text, /f_0004 .*Connection limit 12 Saved/);
+      assert.match(text, /f_0026 .*Connection limit 4/);
+      assert.equal(ids.length, 27, "all chronological context reaches the model, including later generic frames");
+      return { answer: "The saved connection limit was 12 (f_0004); later it is 4 (f_0026).", no_match: false, matches: [
+        { record_ids: ["f_0026", "f_0004"], description: "Saved limit 12, later limit 4.", evidence_status: "supported" },
+      ] };
+    },
+  }, { observe: id => ({ description: "Connection configuration screen.", visible_text: id === "f_0004" ? "Connection limit 12 Saved" : id === "f_0026" ? "Connection limit 4" : "Unrelated request log: duration 12" }) });
+  assert.equal(r.status, "succeeded", JSON.stringify(r.error));
+  const result = SearchResult.parse(r.result);
+  assert.deepEqual(result.matches[0]!.frame_refs, ["f_0004", "f_0026"]);
+  assert.deepEqual([result.matches[0]!.start_ms, result.matches[0]!.end_ms], [6000, 52000]);
+  const body = calls[0]!.body as { instructions: string; text: { format: { schema: { required: string[]; properties: Record<string, unknown> } } } };
+  assert.match(body.instructions, /ENTIRE chronological record list/);
+  assert.match(body.instructions, /BOTH relevant states/);
+  assert.match(body.instructions, /Do not invent a reload/);
+  const schema = body.text.format.schema;
+  assert.deepEqual(Object.keys(schema.properties).slice(0, 2), ["evidence_review", "answer"]);
+  assert.ok(schema.required.includes("evidence_review"), "structured source observations precede the final answer");
+});
+
+test("gpt-4o-mini vision and search omit reasoning while preserving gateway auth, schemas and signals", async (t) => {
+  const fake = fakeOpenAIFetch();
+  const previous = process.env.OPENAI_BASE_URL;
+  process.env.OPENAI_BASE_URL = "https://gateway.example/workspace/models/vision/v1";
+  t.after(() => { if (previous === undefined) delete process.env.OPENAI_BASE_URL; else process.env.OPENAI_BASE_URL = previous; });
+  const ac = new AbortController();
+  const seen: { url: string; signal?: AbortSignal | null; auth: string | null; payload: Record<string, unknown> }[] = [];
+  const edge = (async (input, init) => {
+    seen.push({ url: String(input), signal: init?.signal, auth: new Headers(init?.headers).get("authorization"), payload: JSON.parse(String(init?.body)) });
+    assert.equal(init?.signal?.aborted, false);
+    return fake.fetch(input, init);
+  }) as typeof fetch;
+  const options = { apiKey: "ephemeral-gateway-token", fetch: edge, maxRetries: 0, reasoningEffort: "high", visionModel: "gpt-4o-mini", searchModel: "gpt-4o-mini" };
+  const vision = await new OpenAIVision(options).describe([{ frame_id: "f_0001", jpeg: Buffer.from("fixture bytes") }], ac.signal);
+  const search = await new OpenAISearch(options).search({ query: "what is shown", indexText: "f_0001: observed frame", recordIds: ["f_0001"], maxResults: 1 }, ac.signal);
+  assert.equal(vision.observations.length, 1);
+  assert.equal(search.no_match, true);
+  assert.equal(seen.length, 2);
+  for (const call of seen) {
+    assert.equal(call.url, "https://gateway.example/workspace/models/vision/v1/responses");
+    assert.equal(call.auth, "Bearer ephemeral-gateway-token");
+    assert.equal(call.payload.model, "gpt-4o-mini");
+    assert.equal(Object.hasOwn(call.payload, "reasoning"), false);
+    assert.equal((call.payload.text as { format: { strict: boolean } }).format.strict, true);
+    assert.ok(call.signal);
+  }
+});
+
+test("gpt-5 models retain configured/default reasoning effort on vision and search requests", async (t) => {
+  const fake = fakeOpenAIFetch();
+  const previous = process.env.OPENAI_REASONING_EFFORT;
+  delete process.env.OPENAI_REASONING_EFFORT;
+  t.after(() => { if (previous === undefined) delete process.env.OPENAI_REASONING_EFFORT; else process.env.OPENAI_REASONING_EFFORT = previous; });
+  const options = { apiKey: "fake", fetch: fake.fetch, maxRetries: 0 };
+  await new OpenAIVision({ ...options, visionModel: "gpt-5.4-mini" }).describe([{ frame_id: "f_0001", jpeg: Buffer.from("fixture bytes") }]);
+  await new OpenAISearch({ ...options, searchModel: "gpt-5-mini", reasoningEffort: "high" }).search({ query: "what is shown", indexText: "f_0001: observed", recordIds: ["f_0001"], maxResults: 1 });
+  assert.deepEqual((fake.calls[0].body as { reasoning: unknown }).reasoning, { effort: "low" });
+  assert.deepEqual((fake.calls[1].body as { reasoning: unknown }).reasoning, { effort: "high" });
+});
+
+test("canceling a gpt-4o-mini request aborts the real SDK's in-flight HTTP request", async () => {
+  const ac = new AbortController();
+  const edge = ((_input, init) => new Promise<Response>((_resolve, reject) => {
+    init!.signal!.addEventListener("abort", () => reject(init!.signal!.reason), { once: true });
+    ac.abort(new Error("operation expired"));
+  })) as typeof fetch;
+  const model = new OpenAIVision({ apiKey: "fake", fetch: edge, maxRetries: 0, visionModel: "gpt-4o-mini" });
+  await assert.rejects(model.describe([{ frame_id: "f_0001", jpeg: Buffer.from("fixture bytes") }], ac.signal), { code: "MODEL_UNAVAILABLE", retryable: true });
+});

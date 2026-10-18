@@ -82,7 +82,10 @@ export function Shell({
             <Logo className="h-6 w-6" />
           </Link>
           <div className="flex min-w-0 flex-col leading-tight">
-            <span className="font-display text-sm font-semibold tracking-tight text-white">MediaPack</span>
+            <div className="flex items-center gap-2">
+              <span className="font-display text-sm font-semibold tracking-tight text-white">MediaPack</span>
+              <Badge tone="lime">Stripe test mode</Badge>
+            </div>
             <span className="hidden text-[11px] text-rail-text/70 sm:block">Video search and retrieval for agents</span>
           </div>
           {crumb && <div className="hidden min-w-0 items-center gap-1 border-l border-white/10 pl-3 font-mono text-xs text-rail-text/70 lg:flex">{crumb}</div>}

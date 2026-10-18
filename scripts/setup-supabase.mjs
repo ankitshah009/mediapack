@@ -5,7 +5,7 @@ import { readFile, readdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { createHash } from 'node:crypto';
+import { createHash, X509Certificate } from 'node:crypto';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const require = createRequire(resolve(ROOT, 'apps/mediapack/package.json'));
@@ -18,6 +18,22 @@ export class SetupError extends Error {
   constructor(code, message, nextAction) { super(message); this.code = code; this.next_action = nextAction; }
 }
 function fail(code, message, action) { throw new SetupError(code, message, action); }
+export function databaseSsl(value) {
+  const encoded = value?.trim();
+  if (!encoded) return true;
+  try {
+    if (encoded.length > 262144 || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(encoded)) throw new Error();
+    const pem = Buffer.from(encoded, 'base64').toString('utf8');
+    if (Buffer.from(pem, 'utf8').toString('base64') !== encoded) throw new Error();
+    const certificates = pem.match(/-----BEGIN CERTIFICATE-----\r?\n[A-Za-z0-9+/=\r\n]+-----END CERTIFICATE-----/g);
+    if (!certificates?.length || certificates.reduce((remaining, cert) => remaining.replace(cert, ''), pem).trim()) throw new Error();
+    for (const certificate of certificates) new X509Certificate(certificate);
+    return { ca: pem, rejectUnauthorized: true };
+  } catch {
+    fail('invalid_database_ca', 'DATABASE_CA_CERT_BASE64 must encode a valid PEM certificate bundle.',
+      'Base64-encode the official Supabase CA certificate as one line and save it privately in DATABASE_CA_CERT_BASE64. Certificate verification remains required.');
+  }
+}
 export function safeError(error) {
   return error instanceof SetupError ? { error: error.code, hint: error.message, next_action: error.next_action } : {
     error: 'supabase_setup_failed', hint: 'Supabase setup did not complete; provider payloads and credentials were withheld.',
@@ -143,10 +159,11 @@ export async function setupSupabase({ rootDir = ROOT, envFile = 'apps/web/.env.b
     if (!['postgres:', 'postgresql:'].includes(db.protocol) || !db.hostname || !db.pathname ||
         sb.protocol !== 'https:' || !sb.hostname || sb.username || sb.password || sb.search || sb.hash || sb.pathname !== '/') throw new Error();
   } catch { fail('invalid_configuration', 'DATABASE_URL or SUPABASE_URL has an invalid format.', 'Use the provisioned Postgres connection string and HTTPS project origin without printing either credential.'); }
+  const ssl = databaseSsl(env.DATABASE_CA_CERT_BASE64);
   const migrations = await migrationsAt(rootDir);
   const postgres = postgresFactory ?? require('postgres');
   createClient ??= require('@supabase/supabase-js').createClient;
-  const sql = postgres(env.DATABASE_URL, { max: 1, prepare: false, ssl: true, connect_timeout: 10,
+  const sql = postgres(env.DATABASE_URL, { max: 1, prepare: false, ssl, connect_timeout: 10,
     idle_timeout: 5, onnotice: () => {},
     connection: { application_name: 'mediapack-supabase-setup', statement_timeout: 30000, lock_timeout: 5000 } });
   const controller = new AbortController();
@@ -218,7 +235,7 @@ async function main() {
     'env-file': { type: 'string', default: 'apps/web/.env.blaxel' }, help: { type: 'boolean', short: 'h' } } })); }
   catch { fail('invalid_options', 'Unsupported or incomplete setup options.', 'Run node scripts/setup-supabase.mjs --help.'); }
   if (values.help) {
-    console.log('Usage: node scripts/setup-supabase.mjs [--plan | --apply] [--env-file PATH]\nDefault --plan is read-only. --apply initializes the existing database using atomic checksummed migrations, then configures the private 50 MiB mediapack-private bucket for Supabase Free. Requires DATABASE_URL, SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in the private env file. Never creates an account, changes a billing plan, or substitutes a smaller upload limit.');
+    console.log('Usage: node scripts/setup-supabase.mjs [--plan | --apply] [--env-file PATH]\nDefault --plan is read-only. --apply initializes the existing database using atomic checksummed migrations, then configures the private 50 MiB mediapack-private bucket for Supabase Free. Requires DATABASE_URL, SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in the private env file. Optional DATABASE_CA_CERT_BASE64 supplies the official CA PEM bundle while retaining strict SSL verification. Never creates an account, changes a billing plan, or substitutes a smaller upload limit.');
     return;
   }
   if (values.plan && values.apply) fail('invalid_options', 'Choose either --plan or --apply.', 'Use --plan to inspect or --apply to initialize the provisioned backend.');

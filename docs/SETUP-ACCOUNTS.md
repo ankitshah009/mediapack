@@ -1,80 +1,277 @@
-# Operator setup (things only you can do)
+# Account setup and remaining release steps
 
-Put server values in `apps/web/.env.local` (gitignored). The Next.js dashboard and API run on Blaxel; the MCP proxy runs separately on Manufact. Never paste secrets into chat. Sources: `docs/integrations/*.md`.
+Status verified October 18, 2026. The Next.js dashboard and API run on Blaxel;
+the MCP proxy targets Manufact. Local server settings belong in the ignored
+`apps/web/.env.local`; hosted settings belong in private `apps/web/.env.blaxel`.
+Never paste credentials into chat, use `NEXT_PUBLIC_` for secrets, or copy native
+CLI OAuth tokens into a deployment.
 
-## 1. Stripe (merchant, sandbox) — unblocks payments
-1. Dashboard → Settings → Team and security → **MCP and CLI access** → enable.
-2. Sandbox → create/claim a **Stripe profile** → copy `profile_test_…` → `STRIPE_PROFILE_ID`.
-3. `brew install stripe/stripe-cli/stripe` then `stripe login`.
-4. Sandbox secret key → `STRIPE_SECRET_KEY=sk_test_…`.
-5. Local webhooks: `stripe listen --forward-to localhost:3000/webhooks/stripe` → `STRIPE_WEBHOOK_SECRET=whsec_…`
-   (deployed endpoint gets its own secret later; subscribe it to `payment_intent.succeeded`).
+The database, private storage, recovery scheduler, Primitive request/result
+transport, local transcription, real vision/search and both paid video flows are
+verified on r6. Current r7 has database health OK and no missing provider
+settings; its only change is job-status URL wrapping for narrow viewports. R6
+settings/MCP/source-evidence proof passed **15/15 runtime checks**.
+The answer identifies a timeout saved as 60 returning to 30 after reload; cited
+frames at 40 and 46 seconds were downloaded and visually confirmed, and the
+40–48-second H.264 clip passed checksum and full ffmpeg decode verification.
+The talk video's distinct evidence covers 22–31.44 seconds. Private proof:
+`.blaxel/paid-settings-proof.json`.
 
-## 2. Stripe Projects — provisions Supabase
+The settings job verified one test PaymentIntent, attempt, entitlement and index;
+the same quote returns its receipt, and replay leaves payment/usage unchanged.
+Public Link wallets still require a real profile. R6 Manufact transport, nine
+tools, caller-owned video read and bundled view assets passed. Backend 65 tests,
+worker 39 with real ASR/ffmpeg, web 11 and setup 17 passed. Both migrations also
+passed 42 SQL invariants on fresh PostgreSQL; `0002_worker_launch_events.sql` is
+applied to the live project. R6 recovery passed all 12 checks, including fresh
+signature/replay/tamper handling, 300-second retention and 71 seconds of actual
+cron with zero idle HTTP. Earlier browser checks covered desktop, mobile,
+keyboard navigation and the test-mode badge. Fresh r7 browser checks passed at
+375px and 1280px across both payment tabs without browser patches, including
+command/memory disclosures and keyboard navigation. All 40 assets returned 200
+with no browser errors. Owned r7 Stripe/Primitive callbacks are enabled and their
+signature, persistence and deduplication checks passed. The same-server r7 MCP
+deployment is active; read-only job/pack checks preserved correct evidence and
+usage. All 12 fresh recovery checks passed, including 70.493 seconds with two
+successful cron runs and zero idle HTTP.
 
-Stripe CLI 1.54.0 and Projects plugin 0.50.0 are installed. A live catalog read lists `supabase/free` ($0), `supabase/pro` ($25/month), and the `supabase/project` deployable. The user selected **Free**; no paid plan is authorized. Native CLI sign-in succeeded, but its only authorized account context is a sandbox. Projects initialization returns `PROJECTS_CONTEXT_MISMATCH` because it requires live-mode infrastructure credentials; the suggested `stripe switch context <account_id> --live --format json` was rejected because that account has no authorized live access. No Supabase project has been created.
+## Stripe merchant: verified internal SDK test path
 
-Authorize the parent business account through Stripe's native CLI reauthorization flow, then select its live context. If the authorization link opens the sandbox, use the Dashboard account selector to leave the sandbox and select its parent business before opening [Projects setup](https://dashboard.stripe.com/projects/new). Do not repeatedly re-run login or init for the same context mismatch. Complete the native reauthorization step returned by the CLI once parent-account access has been granted, then inspect the authorized contexts. Infrastructure authorization does not change MediaPack's `PAYMENTS_MODE=test`.
+The persistent test key belongs to the **MediaPack sandbox**
+`acct_1URr6iKClzw2NVcM`, under parent **Aubric**
+`acct_1ULQwVGYTxUe7Sm7`. Its business-profile endpoint still returns 404, but the
+SDK sandbox test path can use this explicit configuration:
 
-Browser sessions need the database and a stable `CAPABILITY_PEPPER`; uploads also need Storage. Stripe merchant payment credentials are separate and are not required for these two steps.
-
-```sh
-stripe projects catalog supabase --json --interactive=false
-stripe projects init mediapack --mode manual --skip-skills --preflight --json --yes --interactive=false
-# After browser authentication and a passing preflight:
-stripe projects init mediapack --mode manual --skip-skills --json --yes --interactive=false
+```dotenv
+PAYMENTS_MODE=test
+STRIPE_TEST_NETWORK_ID=internal
 ```
 
-The manual mode preserves the existing Next.js app. `--skip-skills` preserves the repository's agent instructions. Use Stripe's native browser login when requested; do not paste keys into chat. Inspect existing resources before provisioning to avoid duplicates. Provision the selected Free plan before its project, using the actual installed `add --help`:
+This setting is accepted only in test mode. It creates no fake profile, is never
+an automatic fallback, and does not weaken live-mode requirements. A real
+`profile_test_…` is preferred when present. An actual isolated protocol smoke
+completed **402 → mppx credential → 200 receipt**, then retrieved a succeeded
+USD 0.50 Stripe test PaymentIntent (`amount=50`, `livemode=false`) in this exact
+sandbox. Private proof:
+`/tmp/mediapack-stripe-internal-roundtrip-state.json`. This is a provider-backed
+payment proof. The earlier r5 app subsequently completed an actual CLI
+settings-video purchase for USD 0.50 in test mode. The talk-video full flow has
+passed. R6 settings search/MCP/evidence verification subsequently passed all
+15 runtime checks, with one test payment and unchanged usage on replay.
+
+Keep the verified persistent test key in `STRIPE_SECRET_KEY`. A separate sandbox
+CLI login is unnecessary; the parent's live CLI context is infrastructure-only.
+Run from the repository root:
 
 ```sh
-stripe projects add supabase/free --json --yes --accept-tos --interactive=false
-stripe projects add supabase/project --name mediapack-db --config '{"name":"mediapack","region":"americas"}' --json --yes --accept-tos --interactive=false
-stripe projects env --pull --json --interactive=false
+node scripts/setup-stripe.mjs --plan
+node scripts/setup-stripe.mjs --apply
 ```
 
-**Free-plan upload policy:** Supabase documents a 50 MB global file limit on Free. MediaPack now enforces 50 MiB (52,428,800 bytes) in browser preflight, REST, MCP, CLI, worker validation and bucket setup. The bucket cannot override the project-wide limit, so verify the actual global setting after provisioning. Keep Free selected; Pro starts at $25/month and is not authorized. Sources: [Supabase limits](https://supabase.com/docs/guides/storage/uploads/file-limits), [pricing](https://supabase.com/pricing).
+[The helper](../scripts/setup-stripe.mjs) verifies the sandbox identity and either
+a real test profile or the explicit internal test path, then manages only its
+owned test webhook for `payment_intent.succeeded`. The real plan passed with
+`payment_identity=sandbox_internal` and `test_profile_verified=false`; all 25
+helper tests passed. Setup makes no payment and reads the current preview origin
+from `.blaxel/web-host.json`. Restart after settings change and verify the new
+release's webhook and purchase flow. The owned test webhook is now created with
+its secret applied: a signed ignored fixture and duplicate both returned 200;
+a tampered signature returned 400. Local `stripe listen` has its own secret.
 
-Read the actual generated environment variable names without printing their values. Transfer the pooled `DATABASE_URL`, `SUPABASE_URL`, and server-only `SUPABASE_SERVICE_ROLE_KEY` into private `apps/web/.env.blaxel`, preserving the existing independent internal secrets. Projects' `env --pull` writes locally; it does not configure the Blaxel process. Keep `.projects` vault/cache and `.env*` out of builds and source control.
+For public Link wallet use, create a real profile at
+[Stripe profiles](https://dashboard.stripe.com/profiles) while viewing the
+MediaPack sandbox: **Get started**, then its display name and handle. Internal
+SDK test-network support does not establish public-wallet readiness.
 
-Initialize the provisioned schema and private `mediapack-private` bucket with the setup helper:
+## Supabase: use the existing direct Free project
+
+The user chose direct Supabase Free in the existing selected account. **Do not
+provision through Stripe Projects, create a second project, or upgrade the plan.**
+Project `hwijihrfpoufkucxuwis` is ACTIVE_HEALTHY in `us-west-2`. Verification
+confirmed checksummed migrations (including applied
+`0002_worker_launch_events.sql`), **12 RLS application tables**, the private
+`mediapack-private` bucket, and the global **50 MiB (52,428,800-byte)** upload limit.
+The deployed Next.js `/health` reports database OK.
+
+The private server configuration has `DATABASE_URL`, `SUPABASE_URL`,
+`SUPABASE_SERVICE_ROLE_KEY`, `STORAGE_BUCKET`, and the trusted Supabase CA in
+`DATABASE_CA_CERT_BASE64`. Keep certificate verification enabled; do not replace
+the CA configuration with an insecure TLS bypass. Preserve the independent
+`CAPABILITY_PEPPER`, `WORKER_TOKEN_SECRET`, and `INTERNAL_TICK_TOKEN` across restarts.
+
+To inspect or apply a future migration, use the existing helper:
 
 ```sh
 node scripts/setup-supabase.mjs --plan
 node scripts/setup-supabase.mjs --apply
 ```
 
-The helper tracks migration checksums and applies each new migration atomically. It refuses an untracked pre-existing app schema rather than rerunning the non-idempotent SQL. It requires an exact private 50 MiB bucket and refuses a smaller readback. Verify the project global limit separately. Restart the current Blaxel web host using the exact command in the README, then prove `/health` database connectivity, `/viewer/bootstrap`, the browser cookie, authenticated video listing and a real signed upload. Do not treat configured environment names as runtime verification.
+[Setup](../scripts/setup-supabase.mjs) tracks migration checksums and applies new
+migrations atomically. It refuses an untracked existing application schema and
+requires an exact private 50 MiB bucket. Database health alone does not prove a
+complete upload, payment or worker result: verify bootstrap/cookies, authenticated
+listing and a real signed upload against the deployed app.
 
-Blaxel already has a credited workspace; reuse it without provisioning another plan. `stripe projects share` can produce the submission stack link after a service exists.
+## Buyer credentials are separate from merchant credentials
 
-## 3. Buyer (agent side of MPP)
-**Default — no extra account:** the `mppx` CLI pays our 402 in sandbox using a Stripe test key + test card
-(`MPPX_STRIPE_SECRET_KEY=sk_test_…`, `-M paymentMethod=pm_card_visa`). `scripts` CLI: `buy <job> --via mppx`.
-**Optional — real agent wallet:** Link CLI (needs a US/Canada Link account + Link mobile app approval per spend):
+The default buyer uses mppx shared-payment tokens in Stripe test mode. Configure
+`MPPX_STRIPE_SECRET_KEY=sk_test_…` only in the buyer environment and use test
+payment method `pm_card_visa`. To match the explicit internal merchant test path,
+also set `MPPX_STRIPE_TEST_NETWORK_ID=internal`; the CLI supports
+`buy <job> --via mppx`. Never pass buyer credentials to a worker.
+
+The real provider rejects optional `seller_details` with HTTP 400
+`parameter_unknown`. The buyer permits exactly one SDK-safe retry omitting those
+optional fields for that exact response. It does not retry this way on a timeout
+or any other status/error. Six buyer tests passed.
+
+Link remains optional and uses its own account/approval flow. Public Link wallet
+use still requires a real merchant profile; no live Link wallet purchase is
+claimed.
+
+## Primitive: enabled with a real delivery smoke
+
+The persistent Primitive server key is valid. Setup was applied and the web host
+restarted with its private settings. The existing managed domain is verified;
+the app-owned org-wide webhook is **enabled**. Actual MediaPack work requests
+and results traveled through Primitive and 4 GB Blaxel workers: both the settings
+and talk videos reached ready with actual metadata and source digests. Private
+proof is retained in `.blaxel/public-pair-proof.json`. This proves the upload,
+probe and request/result path. The talk-video paid indexing/search/evidence
+flow has also passed. Final r6 settings search/MCP/evidence verification passed
+15/15 checks with real requests/results and current 4 GB workers.
+
+```sh
+node scripts/setup-primitive.mjs --plan
+node scripts/setup-primitive.mjs --apply
 ```
-npm i -g @stripe/link-cli
-link-cli auth login
+
+[Setup](../scripts/setup-primitive.mjs) reuses the existing account-scoped signing
+secret and valid control/worker addresses. It prepares only the owned disabled
+endpoint, preserves a dedicated worker key when present, and handles an origin
+change through its private ownership record. Do not rotate the organization
+secret or substitute the one-hour CLI OAuth access token for a server key.
+Current API permissions allow managed-zone recipients; older opt-in notes are
+superseded. Setup prepares a disabled endpoint when it creates one; the current
+owned endpoint was separately enabled and real work-envelope/result processing
+has passed. Recheck callback routing when a new preview origin is deployed.
+
+## Blaxel hosting and runtime authentication
+
+Reuse the credited `mediapack` workspace. Applications private-preview access is
+unavailable, so Next.js uses a **sandbox public preview**. The web sandbox has
+2048 MB and permits automatic standby with `keepAlive=false`. Current r7 uses
+`ttl-idle: 24h` through judging; the deployed policy was read back and verified.
+The helper defaults to 1h and accepts whole-hour values from 1h through 24h.
+Workers retain 4096 MB, bounded execution and a 30-minute sandbox lifetime.
+A real service-account cleanup smoke deleted four eligible completed worker
+sandboxes and preserved the web host. The bounded cleanup runs before new
+launches and verifies ownership/image/completed processes; standby by itself is
+never sufficient. Private evidence: `.blaxel/worker-reaper-proof.json`. See
+[the cost guide](blaxel-costs.md) and [worker configuration](../worker/README.md).
+
+Native `bl login mediapack` works for local operations. Hosted worker launch and
+model access support server-only `BL_CLIENT_CREDENTIALS` with `BL_WORKSPACE`;
+explicit `BL_API_KEY` is also supported. Following the user's explicit approval,
+the workspace-scoped member service account `mediapack-runtime` was created.
+Credentials are stored in an ignored mode-0600 file. SDK client-credentials
+authentication and model discovery returned 200. Actual worker probe orchestration
+and real vision/search passed. Current r7 image
+`sandbox/mediapack-web:b355ba20b80085378c07c` is deployed at
+[the r7 app](https://b45bc8809f4a40e5dad83cb402719f89.preview.bl.run/app), with
+database health OK and no missing provider settings. Primitive is enabled with
+signature persistence and deduplication verified. The talk-video full flow
+passed, and source-specific settings search/MCP/evidence verification passed
+15/15 runtime checks. Normal deployed frame retrieval also reclaimed a completed
+current-image search worker. Do not copy local CLI tokens or rely on the custom sandbox's identity
+file. An infrastructure `BL_API_KEY` cannot be forwarded as a model API
+key: workers must receive a short-lived client-credentials OAuth token or a
+dedicated model key. The launcher guards credential discovery and shares one
+SDK initialization across concurrent launches so one operation cannot reset
+another operation's credential object.
+
+Use an immutable built web image with [the hosting helper](../scripts/host-blaxel.mjs):
+
+```sh
+node scripts/host-blaxel.mjs --image sandbox/mediapack-web:BUILT_IMMUTABLE_TAG --env-file apps/web/.env.blaxel --idle-ttl 24h
 ```
-then `buy <job> --via link`. Server path is identical for both.
 
-## 4. Primitive — unblocks the work transport
-The user's existing account is now connected through native CLI browser login. Its managed domain was verified active; the existing signing secret and control/worker service addresses were saved privately, and one disabled org-wide HTTP webhook was created for the current Blaxel origin. A signed empty payload returned 200 from the deployed receiver; a tampered signature returned 401. No email was sent and real work delivery remains unverified.
+The shown 24h policy preserves the judging demo; omit `--idle-ttl` to use the
+1h default for ordinary short sessions. Add `--restart` after changing server settings. The helper assigns the preview
+origin, updates private host state and verifies the deletion policy. Never set a
+positive execution timeout on the long-running web process: the current
+sandbox-api kills it when elapsed, even without process keep-alive. Readiness is
+checked separately.
 
-1. In [Primitive API keys](https://www.primitive.dev/app/settings/api-keys), create a persistent server key and save `PRIMITIVE_API_KEY` in `apps/web/.env.blaxel`. Do not substitute the CLI OAuth access token; it expires in one hour. A dedicated `PRIMITIVE_WORKER_API_KEY` is optional; setup preserves one if present, otherwise reuses the provided server key for replies.
-2. Run `node scripts/setup-primitive.mjs --plan`, then `node scripts/setup-primitive.mjs --apply`. Setup reuses the existing signing secret, derives valid service addresses and prepares only the app-owned disabled endpoint; it never rotates the org secret or changes unrelated routing. It also handles a changed preview URL using the saved endpoint ownership record.
-3. Restart with `scripts/host-blaxel.mjs ... --restart` to apply the private settings. The deployed receiver's signature checks are verified, but Supabase remains unconfigured.
-4. Once Supabase is configured and deployed health reports database OK, verify signed event persistence before enabling the owned endpoint. Then prove a real Primitive work request and worker reply. Current `/send-permissions` reports managed-zone recipients allowed; the older managed-send opt-in note is superseded by the actual account permissions.
+Standby stops active compute billing; retained snapshots/images can still cost
+money. `ttl-idle` counts resume/suspend events, so a continuously active session
+can also be deleted after the configured interval. With 1h this could interrupt
+an active demo; the current release uses 24h for that reason. Deletion removes
+the host and preview; rerun
+hosting and refresh owned callback, recovery and Manufact origins if changed.
+This policy is not an account spending cap.
 
-## 5. Blaxel — unblocks the worker
-`brew install blaxel-ai/blaxel/blaxel` → `bl login` → `BL_WORKSPACE`, `BL_API_KEY`. Image deploy steps: `worker/README.md`.
+## Models: existing gateway plus local transcription
 
-## 6. OpenAI — unblocks indexing/search
-The current worker directly uses `OPENAI_API_KEY`, the configured vision/search model (default `gpt-5.4-mini`), and `whisper-1`. The user's Blaxel workspace already provides a deployed `sandbox-openai` gateway configured with `gpt-4o-mini`. Empty request validation verified Responses/chat routes, while transcription is rejected with 403. Gateway vision/search adaptation and supported hosted authentication are still needed; raw OpenAI credentials are not automatically injected into custom sandboxes. Audio requires a permitted provider endpoint or local transcription. See [verified gateway findings](integrations/primitive-blaxel.md).
+Use the existing Blaxel gateway
+`https://run.blaxel.ai/mediapack/models/sandbox-openai/v1` for vision/search, with
+`OPENAI_VISION_MODEL=gpt-4o-mini` and `OPENAI_SEARCH_MODEL=gpt-4o-mini`.
+`OPENAI_API_KEY` is optional with supported Blaxel authentication; a new direct
+OpenAI key or paid audio API is not required. Configure `OPENAI_BASE_URL` with
+that gateway with the validated runtime authentication above. Real vision and
+search in the latest 4 GB worker are proven in
+`.blaxel/model-runtime-proof.json`; no persistent infrastructure API key is passed
+to the worker as a model credential.
 
-## 7. Hosting
-Reuse the user's existing Blaxel credits and workspace for the Next.js application and media worker. The root `blaxel.toml` and `Dockerfile` package the standalone Next.js application; `worker/blaxel.toml` and `worker/Dockerfile` package the worker. Do not provision another paid plan.
+The immutable worker image
+`sandbox/mediapack-worker:be53b19cc608a18554956` bundles **whisper.cpp 1.9.5** and
+the pinned multilingual base weights. An earlier real 4 GB cloud smoke transcribed
+**44.864 seconds of audio in 7.618 seconds**, returning nine segments. This is
+one measured sample, not a general latency promise or proof of the full indexing
+flow. Production audio uses the local engine without an audio API fallback.
 
-The current workspace lacks Applications private-preview access, so the web host uses a **sandbox public preview**. Build the root image with `bl push --type sandbox --name mediapack-web --workspace mediapack --yes --timeout 20m`, then run `node scripts/host-blaxel.mjs --image sandbox/mediapack-web:<built-immutable-tag> --env-file apps/web/.env.blaxel`. The script assigns the preview origin automatically and reports missing provider configuration. Per the user's cost requirement, it disables process keep-alive to allow automatic standby and enforces deletion after one hour idle (`ttl-idle`). Blaxel counts resume/suspend events for that timer; a continuously active session can also expire after one hour. After deletion, rerun the script and update callback/Manufact origins if changed. Standby stops active compute billing, but snapshot/image storage can still be billed. Add `--restart` to apply updated server environment values.
+## Durable recovery without waking an idle host
 
-Deploy the independent `apps/mcp` service on Manufact following `apps/mcp/README.md`. Give it only `MEDIAPACK_API_URL` pointing to the Blaxel Next.js HTTPS origin. Set the Next.js `PUBLIC_BASE_URL` to that same origin and optional `MCP_PUBLIC_URL` to the Manufact MCP endpoint.
+Supabase minute recovery is installed. Its SQL predicate sends HTTP only when
+persisted work is due; an idle workload emits no HTTP. The hosted HMAC/nonce path
+returned 200 for a fresh request and 401 for replay. Nonces are retained for
+300 seconds. A real committed operation
+whose immediate dispatch was deliberately missed recovered through cron in
+**34.585 seconds**; the next idle cron run queued zero HTTP. All 13 checks passed.
+Private proof: `.blaxel/recovery-interruption-proof.json`.
+
+```sh
+node scripts/setup-recovery.mjs --plan
+node scripts/setup-recovery.mjs --apply
+```
+
+[The recovery guide](recovery-scheduler.md) explains the due-work rules, Vault,
+authentication, ownership and checks. After recreating an expired host, rerun
+hosting first, then recovery plan/apply to update its owned origin. Cron cannot
+recreate a deleted Blaxel sandbox. R6 scheduler-origin reapply succeeded with
+Vault target and active schedule verified. Fresh signed tick returned 200,
+replay/tamper returned 401, and 300-second retention was read back. A final
+71-second actual cron observation returned zero idle HTTP, completing all 12 r6
+checks. R7 origin reapply and all 12 fresh recovery checks also passed: signed
+tick 200, replay/tamper 401, retention 300 seconds, and 70.493 seconds spanning
+two successful cron runs with zero idle HTTP.
+
+## Manufact: transport and owned-video access verified
+
+Existing organization authentication is confirmed. R6 health, MCP transport,
+all nine tools, caller-owned video read and bundled view assets passed at
+`https://fast-wave-awovc.run.mcp-use.com/mcp`. Final settings search returned the
+source-specific saved-60/reloaded-30 answer with cited frames and a playable clip;
+downloaded evidence passed visual, checksum and decode checks. The final runtime
+proof passed 15/15 checks; both talk and settings flows are complete. A new
+same-server r7 deployment `4c0f3b54` is active with only `MEDIAPACK_API_URL`
+pointing at r7. Read-only `get_job` and `get_pack` preserved the correct search,
+four frame references and two clip references without creating operations or
+changing usage. Discovery listed all nine tools and bundled view assets returned 200.
+
+Follow [the MCP guide](../apps/mcp/README.md). Give the proxy only
+`MEDIAPACK_API_URL` pointing at the current Blaxel HTTPS origin; never copy
+database, payment, model or Primitive credentials into it. After readiness,
+verify `/healthz`, the `/mcp` transport, caller capability forwarding and the
+bundled job view. Set optional `MCP_PUBLIC_URL` on Next.js to the verified
+Manufact MCP endpoint. Refresh the API origin when a Blaxel preview is recreated.

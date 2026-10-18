@@ -19,13 +19,11 @@ function purchaseUrl(job: JobView): string {
 
 /** Placeholders only — a real token or key is never rendered. */
 export function payCommands(job: JobView) {
-  const q = job.quote;
   const url = purchaseUrl(job);
-  const ctx = `Buying one MediaPack video pack (quote ${q.quote_id}) so the agent can search and retrieve source evidence from the user's uploaded video. The user asked for this.`;
+  const command = `node scripts/mediapack.mjs buy ${job.job_id} --url '${new URL(url).origin}'`;
   return {
-    mppx: `MPPX_STRIPE_SECRET_KEY=sk_test_… npx mppx '${url}' -J '{"quote_id":"${q.quote_id}"}' -H 'X-MediaPack-Token: $MEDIAPACK_TOKEN' -M paymentMethod=pm_card_visa`,
-    cli: `node scripts/mediapack.mjs buy ${job.job_id}`,
-    link: `link-cli mpp pay '${url}' -X POST -d '{"quote_id":"${q.quote_id}"}' -H 'X-MediaPack-Token: $MEDIAPACK_TOKEN' --context '${ctx}'${q.payment_mode === "test" ? " --test" : ""}`,
+    mppx: `MPPX_STRIPE_TEST_NETWORK_ID=internal ${command} --via mppx`,
+    link: `${command} --via link`,
   };
 }
 
@@ -133,21 +131,22 @@ export function QuotePanel({ job, onNewQuote, busy }: { job: JobView; onNewQuote
           <div id="pay-panel" role="tabpanel" aria-labelledby={`tab-${tab}`} className="mt-3">
             <p className="text-sm">
               {tab === "mppx"
-                ? "Payment is made by the agent or operator with the Stripe sandbox buyer. Run:"
-                : "Pay through the Stripe Link agent wallet (approve in the Link app):"}
+                ? "From the cloned MediaPack repository, use the agent’s paired CLI client and its privately configured Stripe test key:"
+                : "Link requires an authenticated agent wallet and a merchant with a real Stripe profile. This demo’s internal sandbox network uses the default sandbox buyer."}
             </p>
             <pre className="mt-2 overflow-x-auto whitespace-pre-wrap break-all rounded-xl bg-code p-3 font-mono text-[12px] leading-relaxed text-rail-text" tabIndex={0} aria-label="Payment command">
               {tab === "mppx" ? cmds.mppx : cmds.link}
             </pre>
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <CopyButton text={tab === "mppx" ? cmds.mppx : cmds.link} label="Copy payment command" />
-              <span className="text-xs text-muted">Set MEDIAPACK_TOKEN to your client token first; it is never shown here.</span>
+              <span className="text-xs text-muted">Use the same CLI client that owns this video; pair this browser with that client.</span>
             </div>
             {tab === "mppx" && (
               <div className="mt-3">
-                <p className="text-sm">Or with the CLI (default <span className="font-mono text-xs">--via mppx</span>):</p>
-                <pre className="mt-2 overflow-x-auto whitespace-pre-wrap break-all rounded-xl bg-code p-3 font-mono text-[12px] text-rail-text" tabIndex={0} aria-label="CLI buy command">{cmds.cli}</pre>
-                <div className="mt-2"><CopyButton text={cmds.cli} label="Copy CLI buy command" /></div>
+                <p className="text-xs text-muted">
+                  Set <code>MPPX_STRIPE_SECRET_KEY</code> privately in your terminal first. The command explicitly
+                  selects this demo’s internal Stripe test network. No real funds are charged.
+                </p>
               </div>
             )}
             <p className="mt-2 text-xs text-muted">This page does not pay. It updates when Stripe confirms.</p>

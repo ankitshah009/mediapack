@@ -6,7 +6,8 @@ import { z } from "zod";
 import { SCHEMA_VERSION, WorkRequest, WorkResult, type ErrorCode } from "./contracts/index.js";
 import { ACTION_DEADLINE_MS, ACTIONS, type ActionDeps } from "./actions.js";
 import { redact, toWorkerError, WorkerError } from "./errors.js";
-import { OpenAIAsr, OpenAISearch, OpenAIVision, type AsrModel, type SearchModel, type VisionModel } from "./models.js";
+import { OpenAISearch, OpenAIVision, type AsrModel, type SearchModel, type VisionModel } from "./models.js";
+import { WhisperCppAsr } from "./local-asr.js";
 import type { ResultSink } from "./sink.js";
 import type { MediaStore } from "./store.js";
 
@@ -46,7 +47,7 @@ export async function executeRequest(req: WorkRequest, deps: Omit<ExecuteDeps, "
   const d: ActionDeps = {
     store: deps.store, workDir, signal: ac.signal, log: l,
     vision: lazy(deps.models?.vision ?? (() => new OpenAIVision())),
-    asr: lazy(deps.models?.asr ?? (() => new OpenAIAsr())),
+    asr: lazy(deps.models?.asr ?? (() => new WhisperCppAsr({ workDir }))),
     search: lazy(deps.models?.search ?? (() => new OpenAISearch())),
   };
   const base = { schema_version: SCHEMA_VERSION, kind: "work_result" as const, operation_id: req.operation_id, generation: req.generation };

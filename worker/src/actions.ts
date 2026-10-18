@@ -283,7 +283,8 @@ async function searchVideo(req: WorkRequest, d: ActionDeps): Promise<ActionOutpu
     for (const m of out.matches) {
       if (matches.length >= maxResults) break;
       const cited = [...new Set((Array.isArray(m.record_ids) ? m.record_ids : []).filter((id) => typeof id === "string"))];
-      const valid = cited.filter((id) => allowed.has(id) && byId.has(id)).map((id) => byId.get(id)!);
+      const valid = cited.filter((id) => allowed.has(id) && byId.has(id)).map((id) => byId.get(id)!)
+        .sort((a, b) => a.start_ms - b.start_ms || a.record_id.localeCompare(b.record_id));
       rejected += cited.length - valid.length;
       if (!valid.length) continue;
       const frames = valid.filter((r) => r.kind === "frame"), speech = valid.filter((r) => r.kind === "speech");

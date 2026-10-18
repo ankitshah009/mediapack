@@ -178,6 +178,20 @@ test('expired CLI login fails locally without any API request', async t => {
   assert.equal(f.calls.length, 0);
 });
 
+test('OAuth access tokens cannot masquerade as persistent control or worker runtime keys', async t => {
+  for (const key of ['PRIMITIVE_API_KEY', 'PRIMITIVE_WORKER_API_KEY']) {
+    const f = await fixture(t, { env: `PRIMITIVE_API_KEY=${APIKEY}\n${key}=prim_oat_private_short_lived_token\n` });
+    await assert.rejects(setupPrimitive({ ...f.options, apply: true }), error => {
+      assert.equal(error.code, 'expiring_runtime_credential');
+      assert.match(error.next_action, /Settings > API keys/);
+      assert.ok(!error.message.includes('private_short_lived_token'));
+      return true;
+    });
+    assert.equal(f.calls.length, 0);
+    assert.equal(await readFile(f.envPath, 'utf8'), f.env);
+  }
+});
+
 test('API failures expose HTTP status and action but never provider payloads', async t => {
   const f = await fixture(t);
   const fetchImpl = async () => Response.json({ error: `private:${SECRET}:${APIKEY}` }, { status: 403 });

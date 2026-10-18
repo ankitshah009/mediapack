@@ -78,7 +78,7 @@ export function JobPage({ jobId }: { jobId: string }) {
           <PaymentStateBadge job={j} />
           <Badge tone={j.state === "ready" ? "ok" : j.state === "failed" ? "danger" : j.state === "expired" ? "neutral" : "warn"}>{j.state.replace("_", " ")}</Badge>
         </div>
-        <p className="mt-1 text-sm text-muted" role="status">{j.next_action}</p>
+        <p className="mt-1 wrap-anywhere text-sm text-muted" role="status">{j.next_action}</p>
         {job.error && <div className="mt-3"><ErrorPanel error={job.error} onRetry={job.reload} /></div>}
       </div>
 

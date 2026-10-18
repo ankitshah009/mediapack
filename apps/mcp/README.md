@@ -55,7 +55,7 @@ Exactly one MCP App view is bound, to `get_job`; it renders the API's persisted 
 
 ## Deploy to Manufact
 
-Deployment commands below were checked against installed `mcp-use deploy --help` (CLI 4.4.1 from mcp-use 2.10.1). The project has not been deployed automatically.
+Deployment commands below were checked against installed `mcp-use deploy --help` (CLI 4.4.1 from mcp-use 2.10.1). The managed-source deployment is live at [MediaPack MCP](https://fast-wave-awovc.run.mcp-use.com/mcp). Cloud verification covered all nine tools, the 50 MiB upload schema, the bundled result view and capability forwarding to the live Next.js API.
 
 For a GitHub deployment from this monorepo, run in `apps/mcp` after setting the API URL in a local `.env.production` file:
 
@@ -70,6 +70,8 @@ npm run deploy -- --no-github --env-file .env.production
 ```
 
 Do not put provider secrets or user capabilities in that environment file. Keep the emitted Manufact `/mcp` URL for agent connections and configure each client's authorization header independently. The server listens on `0.0.0.0` and respects Manufact's `PORT` through `mcp-use start`.
+
+The installed CLI saves this managed deployment's local link in `.mcp-use/cloud/link.json` (gitignored). Subsequent deployments from this directory reuse the same server. If the Blaxel preview origin changes, update only `MEDIAPACK_API_URL` and redeploy the linked server; do not create another server or add provider credentials to this proxy.
 
 ## Verify
 

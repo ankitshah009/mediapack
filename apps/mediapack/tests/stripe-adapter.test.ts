@@ -71,3 +71,24 @@ test("a credential from another quote is refused before a Stripe submission", as
   assert.equal(result.status, 402);
   assert.equal(submissions.length, count);
 });
+
+test("explicit internal test-network challenges retain quote binding and Stripe verification", async () => {
+  const port = (stripe.address() as { port: number }).port;
+  const internal = createStripeAdapter(parseConfig({
+    STRIPE_SECRET_KEY: "sk_test_internal_adapter_only", STRIPE_TEST_NETWORK_ID: "internal", PAYMENTS_MODE: "test",
+    MPP_SECRET_KEY: "internal-test-signing-secret-at-least-32-characters", STRIPE_API_BASE: `http://127.0.0.1:${port}`,
+  }));
+  const issued = await internal.charge(request(), binding);
+  assert.equal(issued.status, 402);
+  if (issued.status !== 402) return;
+  const challenge = Challenge.fromResponse(issued.response);
+  assert.equal(challenge.request.methodDetails?.networkId, "internal");
+  assert.equal(challenge.request.externalId, binding.quoteId);
+  const credential = Credential.serialize(Credential.from({ challenge, payload: { spt: "spt_internal_fixture", externalId: binding.quoteId } }));
+  const paid = await internal.charge(request(credential), binding);
+  assert.equal(paid.status, 200);
+  if (paid.status !== 200) return;
+  assert.ok(paid.receiptHeader);
+  assert.equal(submissions.at(-1)!.get("shared_payment_granted_token"), "spt_internal_fixture");
+  assert.equal(submissions.at(-1)!.get("metadata[quote_id]"), binding.quoteId);
+});

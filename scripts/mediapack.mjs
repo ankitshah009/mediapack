@@ -10,6 +10,7 @@ import { parseArgs } from 'node:util';
 import { createServer } from 'node:http';
 import { spawn } from 'node:child_process';
 import { Readable } from 'node:stream';
+import { createSandboxTokenIssuer } from './stripe-buyer.mjs';
 
 const HELP = `MediaPack 1.0.0 — upload, purchase a sandbox pack, retrieve source evidence
 
@@ -50,6 +51,7 @@ Options:
 JSON goes to stdout; progress and retry identifiers go to stderr. The bootstrap
 response omits the capability. Signed artifact URLs and pairing codes are sensitive.
 Buyer env: MPPX_STRIPE_SECRET_KEY=sk_test_... (mppx); Link requires its own login.
+Explicit internal sandbox network: MPPX_STRIPE_TEST_NETWORK_ID=internal (mppx only).
 No automatic purchase retries. An uncertain outcome must be inspected with status.
 `;
 
@@ -205,18 +207,10 @@ async function buy() {
   }
 }
 async function stripeBuyer(q) {
-  const key = process.env.MPPX_STRIPE_SECRET_KEY;
-  if (!/^(sk|rk)_test_/.test(key ?? '')) fail('Set MPPX_STRIPE_SECRET_KEY to a buyer Stripe sandbox key in your terminal.');
+  const createToken = createSandboxTokenIssuer({ quote: q, key: process.env.MPPX_STRIPE_SECRET_KEY,
+    testNetworkId: process.env.MPPX_STRIPE_TEST_NETWORK_ID });
   const { Mppx, stripe } = await import(pathToFileURL(rootRequire.resolve('mppx/client')));
-  return Mppx.create({ polyfill: false, maxPaymentRetries: 1, methods: [stripe.charge({ paymentMethod: 'pm_card_visa', createToken: async ({ amount, currency, networkId, expiresAt, challenge }) => {
-    if (Number(amount) !== q.amount_minor || currency.toLowerCase() !== q.currency.toLowerCase() || !networkId.startsWith('profile_test_') || challenge.request.externalId !== q.quote_id) fail('MPP challenge does not match the authorized sandbox quote.');
-    const body = new URLSearchParams({ payment_method: 'pm_card_visa', 'usage_limits[currency]': currency, 'usage_limits[max_amount]': amount, 'usage_limits[expires_at]': String(expiresAt), 'seller_details[network_id]': networkId });
-    const response = await fetch('https://api.stripe.com/v1/test_helpers/shared_payment/granted_tokens', { method: 'POST', redirect: 'error', headers: { authorization: `Basic ${Buffer.from(`${key}:`).toString('base64')}`, 'content-type': 'application/x-www-form-urlencoded', 'Stripe-Version': '2026-07-29.preview' }, body, signal: AbortSignal.timeout(30_000) });
-    if (!response.ok) fail(`Stripe sandbox token creation failed (HTTP ${response.status}); check test-helper access and your buyer key. No automatic retry.`);
-    const token = await response.json();
-    if (typeof token.id !== 'string') fail('Stripe returned no shared payment token.');
-    return token.id;
-  } })] });
+  return Mppx.create({ polyfill: false, maxPaymentRetries: 1, methods: [stripe.charge({ paymentMethod: 'pm_card_visa', createToken })] });
 }
 async function linkHelp() {
   const result = await subprocess('link-cli', ['mpp', 'pay', '--help'], 15_000);

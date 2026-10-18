@@ -34,7 +34,7 @@ export function createStripeAdapter(cfg: Config): StripeAdapter {
   let built: { client: Stripe; mppx: AnyMppx } | undefined;
   const build = () => {
     if (built) return built;
-    const { secretKey, profileId } = requireStripe(cfg);
+    const { secretKey, networkId } = requireStripe(cfg);
     const apiBase = cfg.stripeApiBase ? new URL(cfg.stripeApiBase) : undefined;
     const client = new Stripe(secretKey, {
       timeout: cfg.stripeTimeoutMs,
@@ -42,7 +42,7 @@ export function createStripeAdapter(cfg: Config): StripeAdapter {
       ...(apiBase ? { host: apiBase.hostname, port: apiBase.port, protocol: apiBase.protocol.replace(":", "") as "http" | "https" } : {}),
     });
     const livemode = !/_test_/.test(secretKey);
-    const smp = mppxStripe.create({ client, networkId: profileId, livemode, store: Store.memory() });
+    const smp = mppxStripe.create({ client, networkId, livemode, store: Store.memory() });
     const mppx = Mppx.create({
       methods: [smp.spt.charge()],
       secretKey: mppSecret(cfg),

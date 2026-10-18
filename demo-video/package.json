@@ -6,7 +6,8 @@
     "studio": "remotion studio src/index.ts",
     "voice": "node tts.mjs && node beats.mjs",
     "render": "remotion render src/index.ts MediaPackDemo out/mediapack-demo.mp4 --codec h264 --crf 16",
-    "images": "remotion still src/index.ts ArchitectureImage ../docs/images/architecture.png && remotion still src/index.ts JobFlowImage ../docs/images/job-flow.png"
+    "images": "remotion still src/index.ts ArchitectureImage ../docs/images/architecture.png && remotion still src/index.ts JobFlowImage ../docs/images/job-flow.png",
+    "e2e:live": "node capture/e2e-live.mjs"
   },
   "dependencies": {
     "@remotion/cli": "4.0.536",

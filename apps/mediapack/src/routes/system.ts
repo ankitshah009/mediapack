@@ -4,10 +4,10 @@ import { dirname, extname, join, normalize, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { RouteHost } from "./http.js";
 import { z } from "zod";
-import { integrationStatus, requireTickToken } from "../config.js";
+import { integrationStatus } from "../config.js";
 import { INDEXER_VERSION, INPUT_LIMITS, PACK } from "../contracts/index.js";
 import { AppError } from "../services/errors.js";
-import { safeEqual } from "../services/crypto.js";
+import { authorizeRecoveryTick } from "../services/tick-auth.js";
 import { artifactAccess, verifyWorkerToken } from "../services/workerTokens.js";
 import { handlePrimitiveWebhook, reprocessPendingEvents } from "../services/inbox.js";
 import { dispatchOutbox } from "../services/outbox.js";
@@ -45,8 +45,7 @@ export function registerSystem(server: RouteHost, ctx: Ctx, { serveStatic = true
 
   // ── internal ──
   server.post("/internal/tick", guard(async (c) => {
-    const token = bearer(c.req.header("authorization"));
-    if (!token || !safeEqual(token, requireTickToken(ctx.cfg))) throw new AppError("UNAUTHORIZED", "Invalid tick token.");
+    await authorizeRecoveryTick(ctx, c.req.raw.headers);
     const reaped = (await ctx.sql`select reap_stale_operations(20) as n`)[0]!.n as number;
     const expired_uploads = await sweepExpiredUploads(ctx);
     const events = await reprocessPendingEvents(ctx).catch((e) => (console.error("[tick] events", e.message), -1));

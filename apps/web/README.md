@@ -57,4 +57,4 @@ Use the [root deployment instructions](../../README.md#worker-image-and-recovery
 
 The web process permits automatic standby and has one-hour idle deletion. Deletion removes its preview URL. Environment changes require restarting the process; a new immutable image requires a fresh sandbox name. Obtain the current origin from the private host report rather than assuming an old preview remains available.
 
-The [verification record](../../docs/verification.md) distinguishes tested behavior from pending provider checks. Purchases remain explicitly labeled Stripe test mode.
+The [verification record](../../docs/verification.md) contains dated cloud-flow, browser and provider evidence, with exact images and limits. Purchases remain explicitly labeled Stripe test mode.

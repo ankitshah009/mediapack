@@ -2,6 +2,8 @@
 
 This runbook describes how to release the complete project and prove its critical path. The [verification record](verification.md) contains dated evidence; it is not proof that every provider is currently connected.
 
+The October 18 cloud record includes Supabase Free, real signed uploads, Primitive worker delivery, two idempotent test purchases, source-specific search and verified frames/playable clips for both recordings, a running Manufact proxy, automatic completed-worker reclamation and conditional recovery with zero idle HTTP requests. The final r7 release adds the unpaid job page's mobile text-wrapping correction; consult the newest verification section for exact images, rollout checks and historical provenance.
+
 ## Documentation map
 
 | Document | Use |
@@ -60,7 +62,7 @@ Database and transport integration tests need local Postgres, ffmpeg and permiss
 | Primitive | Persistent credentials; signed event persistence; enabled app-owned endpoint; actual work request and result delivery |
 | Blaxel | Correct images and allocations; ready logs; supported runtime launch authentication; bounded workers |
 | Models | Actual vision, transcription and search calls, or a verified packaged local engine |
-| Stripe sandbox | Test merchant/profile and webhook; one authorized purchase unlocks exactly one entitlement |
+| Stripe sandbox | Verified test account, profile or explicit internal test-network configuration, and owned webhook; one purchase unlocks exactly one entitlement. Public Link wallets require an actual profile. |
 | Manufact | Public MCP endpoint forwards caller-specific capabilities to the current API origin |
 | Recovery | Deployed scheduler invokes the authenticated tick and recovers an interrupted operation |
 
@@ -72,7 +74,7 @@ The user selected Supabase Free. The current upload contract and private bucket 
 
 Follow the root README's image-build and hosting instructions. Apply private server configuration at runtime and restart the correct web process after environment changes. Use a fresh sandbox name for a new image; changing image metadata did not replace the filesystem in the recorded rollout.
 
-Read ready logs, load `/app` and its browser assets, and verify browser sessions and real signed upload. Configure Primitive and Manufact with the resulting API origin. Sandbox previews disappear when deletion fires; update callbacks when an origin changes. The web host uses 2 GB and one-hour idle deletion; workers request 4 GB and have a 30-minute maximum sandbox lifetime. These policies are not a dollar cap.
+Read ready logs, load `/app` and its browser assets, and verify browser sessions and real signed upload. Configure Primitive and Manufact with the resulting API origin. Sandbox previews disappear when deletion fires; update callbacks when an origin changes. The web host uses 2 GB and permits standby. The helper defaults to one-hour deletion; the current judging deployment uses `--idle-ttl 24h`. Workers request 4 GB and have a 30-minute maximum sandbox lifetime. These policies are not a dollar cap.
 
 For the full demonstration:
 

@@ -86,7 +86,9 @@ export function Uploader({ onUploaded }: { onUploaded?: () => void }) {
             id="video-file"
             type="file"
             accept={INPUT.contentTypes.join(",")}
-            className="sr-only"
+            aria-label="Choose video"
+            hidden
+            tabIndex={-1}
             disabled={busy}
             onChange={(e) => {
               const f = e.target.files?.[0];

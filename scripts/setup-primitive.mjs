@@ -66,6 +66,12 @@ export async function setupPrimitive({ rootDir = ROOT, envFile = 'apps/web/.env.
   const envPath = resolve(rootDir, envFile);
   const original = await optionalFile(envPath) ?? '';
   const env = parseEnv(original);
+  for (const key of ['PRIMITIVE_API_KEY', 'PRIMITIVE_WORKER_API_KEY']) {
+    if (env[key]?.trim().startsWith('prim_oat_')) {
+      fail('expiring_runtime_credential', 'A runtime Primitive key setting contains an expiring OAuth access token.',
+        'Create a persistent key in the Primitive dashboard under Settings > API keys. Keep CLI OAuth credentials out of application env files.');
+    }
+  }
   const persistentKey = env.PRIMITIVE_API_KEY?.trim();
   let token = persistentKey, auth = 'api_key';
   if (!token) {

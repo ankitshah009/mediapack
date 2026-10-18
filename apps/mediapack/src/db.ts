@@ -10,6 +10,7 @@ export function createSql(cfg: Config): Sql {
     prepare: false,
     idle_timeout: 20,
     connect_timeout: 10,
+    ...(cfg.databaseCaCert ? { ssl: { ca: cfg.databaseCaCert, rejectUnauthorized: true } } : {}),
     onnotice: () => {},
   });
 }

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
+import { createHmac, randomUUID } from "node:crypto";
 import { after, before, beforeEach, test } from "node:test";
 import Stripe from "stripe";
 import { signWebhookPayload } from "@primitivedotdev/sdk";
@@ -11,6 +11,7 @@ import type { StorageAdapter } from "../src/adapters/storage.js";
 import { INDEXER_VERSION, JobView, Quote, sha256Hex } from "../src/contracts/index.js";
 import { buildHttpApp } from "../src/http-app.js";
 import { drain, type Ctx, type WorkerManifest } from "../src/services/ctx.js";
+import { AppError } from "../src/services/errors.js";
 import { startPostgres } from "./helpers/postgres.js";
 
 const ORIGIN = "http://localhost:3000";
@@ -28,7 +29,10 @@ let charge: (request: Request, binding: ChargeBinding) => Promise<ChargeOutcome>
 
 const storage: StorageAdapter = {
   bucket: "test-private",
-  async createUpload(key, contentType) { return { method: "PUT", url: `https://storage.invalid/${key}`, headers: { "content-type": contentType }, expires_in_seconds: 3600 }; },
+  async createUpload(key, contentType) {
+    if (objects.has(key)) throw new AppError("INTERNAL", "Storage signed upload failed: immutable object already exists.", { status: 502 });
+    return { method: "PUT", url: `https://storage.invalid/${key}`, headers: { "content-type": contentType, "x-upsert": "false" }, expires_in_seconds: 3600 };
+  },
   async createDownloadUrl(key) { return `https://storage.invalid/${key}?signed=test-only`; },
   async createDownloadUrls(keys) { return Object.fromEntries(keys.map((key) => [key, `https://storage.invalid/${key}?signed=test-only`])); },
   async stat(key) { const data = objects.get(key); return data ? { size: data.length } : null; },
@@ -62,6 +66,7 @@ before(async () => {
   });
   ctx = built.ctx;
   app = built.app;
+  await createRecoveryNonceTable();
 });
 
 after(async () => {
@@ -72,6 +77,7 @@ after(async () => {
 beforeEach(async () => {
   await drain(ctx);
   await ctx.sql`truncate clients, provider_events, rate_counters restart identity cascade`;
+  await ctx.sql`truncate mediapack_setup.recovery_nonces`;
   objects.clear(); mails.length = 0; launches.length = 0; intents.clear(); chargeCalls = 0;
   charge = async (request, binding) => {
     if (!request.headers.get("authorization")?.startsWith("Payment ")) {
@@ -82,6 +88,20 @@ beforeEach(async () => {
     return { status: 200, reference: id, receiptHeader: "test-receipt", withReceipt(response) { response.headers.set("payment-receipt", "test-receipt"); return response; } };
   };
 });
+
+/** Scheduler infrastructure is installed only inside the disposable test database. */
+async function createRecoveryNonceTable() {
+  await ctx.sql`create schema if not exists mediapack_setup`;
+  await ctx.sql`create table if not exists mediapack_setup.recovery_nonces (nonce uuid primary key, expires_at timestamptz not null)`;
+}
+
+function signedTickHeaders(secret = ctx.cfg.internalTickToken!, timestamp = String(Math.floor(Date.now() / 1000)), nonce = randomUUID()) {
+  return {
+    "x-mediapack-tick-timestamp": timestamp,
+    "x-mediapack-tick-nonce": nonce,
+    "x-mediapack-tick-signature": createHmac("sha256", secret).update(`mediapack-tick-v1\n${timestamp}\n${nonce}`).digest("hex"),
+  };
+}
 
 async function request(path: string, token?: string, body?: unknown, headers: Record<string, string> = {}) {
   const response = await app.request(`${ORIGIN}${path}`, {
@@ -194,9 +214,68 @@ test("upload retry preserves one reservation and rejects changed immutable input
   const same = await request("/v1/videos", token, input);
   assert.equal(same.response.status, 200);
   assert.equal(same.body.video_id, videoId);
+  assert.equal(same.body.upload, null, "the immutable uploaded source must not receive a replacement upload grant");
+  assert.match(same.body.next_action, /complete_upload/);
   const changed = await request("/v1/videos", token, { ...input, content_type: "video/webm" });
   assert.equal(changed.response.status, 409, JSON.stringify(changed.body));
   assert.equal(changed.body.error.code, "IDEMPOTENCY_CONFLICT");
+});
+
+test("upload retries before PUT keep the original video and can refresh a non-overwriting grant", async () => {
+  const token = await client();
+  const input = { request_id: randomUUID(), file_name: "retry-before-put.mp4", size_bytes: 1024, content_type: "video/mp4" };
+  const first = await request("/v1/videos", token, input);
+  const retry = await request("/v1/videos", token, input);
+  assert.equal(first.response.status, 201);
+  assert.equal(retry.response.status, 200);
+  assert.equal(retry.body.video_id, first.body.video_id);
+  assert.equal(retry.body.upload.method, "PUT");
+  assert.equal(retry.body.upload.headers["x-upsert"], "false");
+  assert.match(retry.body.next_action, /upload\.url/);
+  assert.equal(Number((await ctx.sql`select count(*) as n from videos`)[0]!.n), 1);
+});
+
+test("a PUT that wins the URL-mint race resumes completion without replacing the immutable source", async () => {
+  const token = await client();
+  const { videoId, input } = await upload(token);
+  const key = `${videoId}/source.mp4`;
+  const original = objects.get(key)!;
+  const realStat = ctx.storage.stat;
+  let checks = 0;
+  ctx.storage.stat = async (objectKey) => {
+    if (objectKey === key && ++checks === 1) return null; // PUT finishes immediately after this lookup.
+    return realStat(objectKey);
+  };
+  try {
+    const retry = await request("/v1/videos", token, input);
+    assert.equal(retry.response.status, 200, JSON.stringify(retry.body));
+    assert.equal(retry.body.video_id, videoId);
+    assert.equal(retry.body.upload, null);
+    assert.match(retry.body.next_action, /complete_upload/);
+    assert.equal(checks, 2, "failed mint must verify that an object now exists before treating it as resumable");
+    assert.equal(objects.get(key), original);
+    assert.equal(Number((await ctx.sql`select count(*) as n from operations`)[0]!.n), 0);
+  } finally {
+    ctx.storage.stat = realStat;
+  }
+});
+
+test("a failed upload grant with no stored object remains an actionable error", async () => {
+  const token = await client();
+  const { videoId, input } = await upload(token);
+  objects.clear();
+  const realCreateUpload = ctx.storage.createUpload;
+  ctx.storage.createUpload = async () => { throw new AppError("INTERNAL", "Storage signed upload failed.", { status: 502, retryable: true }); };
+  try {
+    const retry = await request("/v1/videos", token, input);
+    assert.equal(retry.response.status, 502);
+    assert.equal(retry.body.error.code, "INTERNAL");
+    assert.equal(retry.body.error.retryable, true);
+    assert.ok(retry.body.next_action);
+    assert.equal(Number((await ctx.sql`select count(*) as n from videos where id = ${videoId}::uuid`)[0]!.n), 1);
+  } finally {
+    ctx.storage.createUpload = realCreateUpload;
+  }
 });
 
 test("Supabase Free upload boundary is enforced before reserving storage or persisting a video", async () => {
@@ -240,6 +319,9 @@ test("verified Primitive delivery launches once and fences worker artifact crede
   assert.ok(concurrent.every((r) => r.response.status === 200));
   assert.equal(launches.length, 1);
   const manifest = launches[0]!;
+  const launchEvents = await ctx.sql`select kind, details from job_events where operation_id = ${completed.body.operation_id}::uuid and kind in ('worker.claimed','worker.launched') order by id`;
+  assert.deepEqual(launchEvents.map((event) => event.kind), ["worker.claimed", "worker.launched"]);
+  assert.deepEqual(launchEvents[1]!.details, { kind: "probe_video", sandbox: `sandbox-${completed.body.operation_id}`, process: "process-g1", generation: 1 });
   assert.equal(manifest.reply_email_id, "email_same-event");
   const access = (name: string) => request(`/internal/operations/${manifest.work_request.operation_id}/artifact-access`, undefined, { uploads: [{ name, content_type: "application/json" }], downloads: ["source"] }, { authorization: `Bearer ${manifest.worker_token}` });
   assert.equal((await access("../escape.json")).response.status, 400);
@@ -249,6 +331,116 @@ test("verified Primitive delivery launches once and fences worker artifact crede
   const [event] = await ctx.sql`select email_id, thread_id from provider_events where event_id = 'same-event'`;
   assert.equal(event!.email_id, "email_same-event");
   assert.equal(event!.thread_id, `thread_${completed.body.operation_id}`);
+});
+
+test("a failed provider launch records only claims through its bounded retries", async () => {
+  const token = await client();
+  const { videoId } = await upload(token);
+  const completed = await request(`/v1/videos/${videoId}/complete`, token, {});
+  const opId = completed.body.operation_id;
+  const realLaunch = ctx.launchWorker;
+  ctx.launchWorker = async () => { throw new Error("provider rejected sandbox creation"); };
+  try {
+    await dispatchAndLaunch(opId);
+    await dispatchAndLaunch(opId);
+    const events = await ctx.sql`select kind from job_events where operation_id = ${opId}::uuid and kind in ('worker.claimed','worker.launched') order by id`;
+    assert.deepEqual(events.map((event) => event.kind), ["worker.claimed", "worker.claimed"]);
+    const [op] = await ctx.sql`select state, attempts, generation from operations where id = ${opId}::uuid`;
+    assert.equal(op!.state, "failed");
+    assert.equal(op!.attempts, 2);
+    assert.equal(op!.generation, 2);
+  } finally {
+    ctx.launchWorker = realLaunch;
+  }
+});
+
+test("a lease claim is visible before provider launch resolves without announcing a process", async () => {
+  const token = await client();
+  const { videoId } = await upload(token);
+  const completed = await request(`/v1/videos/${videoId}/complete`, token, {});
+  const opId = completed.body.operation_id;
+  await drain(ctx);
+  const [outbox] = await ctx.sql`select payload from outbox where operation_id = ${opId}::uuid`;
+  let release!: () => void;
+  let entered!: () => void;
+  const pending = new Promise<void>((resolve) => { release = resolve; });
+  const launching = new Promise<void>((resolve) => { entered = resolve; });
+  const realLaunch = ctx.launchWorker;
+  ctx.launchWorker = async () => {
+    entered();
+    await pending;
+    return { sandboxName: "provider-sandbox", processName: "provider-process" };
+  };
+  const response = deliver(outbox!.payload);
+  try {
+    await launching;
+    const before = await ctx.sql`select kind from job_events where operation_id = ${opId}::uuid and kind in ('worker.claimed','worker.launched') order by id`;
+    assert.deepEqual(before.map((event) => event.kind), ["worker.claimed"]);
+    release();
+    assert.equal((await response).response.status, 200);
+    const after = await ctx.sql`select kind, details from job_events where operation_id = ${opId}::uuid and kind in ('worker.claimed','worker.launched') order by id`;
+    assert.deepEqual(after.map((event) => event.kind), ["worker.claimed", "worker.launched"]);
+    assert.equal(after[1]!.details.sandbox, "provider-sandbox");
+    assert.equal(after[1]!.details.process, "provider-process");
+  } finally {
+    release();
+    await response;
+    ctx.launchWorker = realLaunch;
+  }
+});
+
+test("the claim-event migration preserves privileged function execution restrictions", async () => {
+  const [permissions] = await ctx.sql`select
+    has_function_privilege('anon', 'claim_operation(uuid,integer,text,text,integer)', 'EXECUTE') as anon,
+    has_function_privilege('authenticated', 'claim_operation(uuid,integer,text,text,integer)', 'EXECUTE') as authenticated,
+    has_function_privilege(current_user, 'claim_operation(uuid,integer,text,text,integer)', 'EXECUTE') as owner`;
+  assert.equal(permissions!.anon, false);
+  assert.equal(permissions!.authenticated, false);
+  assert.equal(permissions!.owner, true);
+});
+
+test("a late successful launch cannot overwrite or announce a newer operation generation", async () => {
+  const token = await client();
+  const { videoId } = await upload(token);
+  const completed = await request(`/v1/videos/${videoId}/complete`, token, {});
+  const opId = completed.body.operation_id;
+  const realLaunch = ctx.launchWorker;
+  ctx.launchWorker = async () => {
+    await ctx.sql`select fail_or_retry_operation(${opId}::uuid, 1, 'WORKER_FAILED', 'lease superseded while launch response was pending', true)`;
+    await ctx.sql`update operations set sandbox_name = 'newer-sandbox', process_name = 'newer-process' where id = ${opId}::uuid and generation = 2`;
+    return { sandboxName: "late-old-sandbox", processName: "late-old-process" };
+  };
+  try {
+    await dispatchAndLaunch(opId);
+    const [op] = await ctx.sql`select generation, sandbox_name, process_name from operations where id = ${opId}::uuid`;
+    assert.equal(op!.generation, 2);
+    assert.equal(op!.sandbox_name, "newer-sandbox");
+    assert.equal(op!.process_name, "newer-process");
+    assert.equal(Number((await ctx.sql`select count(*) as n from job_events where operation_id = ${opId}::uuid and kind = 'worker.launched'`)[0]!.n), 0);
+  } finally {
+    ctx.launchWorker = realLaunch;
+  }
+});
+
+test("worker identity and the factual launch event roll back together if event persistence fails", async () => {
+  const token = await client();
+  const { videoId } = await upload(token);
+  const completed = await request(`/v1/videos/${videoId}/complete`, token, {});
+  const opId = completed.body.operation_id;
+  await ctx.sql.unsafe(`create function test_reject_worker_launch_event() returns trigger language plpgsql as $$
+    begin if new.kind = 'worker.launched' then raise exception 'test launch event persistence failure'; end if; return new; end $$`);
+  await ctx.sql`create trigger test_reject_worker_launch before insert on job_events for each row execute function test_reject_worker_launch_event()`;
+  try {
+    await dispatchAndLaunch(opId);
+    const [op] = await ctx.sql`select generation, sandbox_name, process_name from operations where id = ${opId}::uuid`;
+    assert.equal(op!.generation, 2);
+    assert.equal(op!.sandbox_name, `mp-${opId.slice(0, 8)}-g1`, "the returned provider identity must roll back with its failed event insert");
+    assert.equal(op!.process_name, `mp-${opId.slice(0, 8)}-g1`);
+    assert.equal(Number((await ctx.sql`select count(*) as n from job_events where operation_id = ${opId}::uuid and kind = 'worker.launched'`)[0]!.n), 0);
+  } finally {
+    await ctx.sql`drop trigger test_reject_worker_launch on job_events`;
+    await ctx.sql`drop function test_reject_worker_launch_event()`;
+  }
 });
 
 test("concurrent purchases create one charge and all paid replays return the same receipt", async () => {
@@ -495,4 +687,74 @@ test("worker preflight rejection accepts null media metadata and becomes a termi
   const [op] = await ctx.sql`select state, generation from operations where id = ${opId}::uuid`;
   assert.equal(op!.state, "succeeded", "probe succeeded in determining that input is rejected");
   assert.equal(op!.generation, 1, "unsupported input must not trigger a worker retry");
+});
+
+test("a signed recovery tick claims its nonce once and a replay cannot run recovery again", async () => {
+  const headers = signedTickHeaders();
+  const first = await request("/internal/tick", undefined, {}, headers);
+  assert.equal(first.response.status, 200, JSON.stringify(first.body));
+  assert.equal(first.body.ok, true);
+  const replay = await request("/internal/tick", undefined, {}, headers);
+  assert.equal(replay.response.status, 401);
+  assert.equal(replay.body.error.code, "UNAUTHORIZED");
+  const [nonce] = await ctx.sql`select nonce, expires_at > now() + interval '290 seconds' as retained from mediapack_setup.recovery_nonces`;
+  assert.equal(nonce!.nonce, headers["x-mediapack-tick-nonce"]);
+  assert.equal(nonce!.retained, true, "five-minute nonce retention must outlast the full inclusive, future-dated signature window");
+});
+
+test("concurrent copies of a signed recovery tick atomically authorize only one request", async () => {
+  const headers = signedTickHeaders();
+  const responses = await Promise.all(Array.from({ length: 8 }, () => request("/internal/tick", undefined, {}, headers)));
+  assert.equal(responses.filter((r) => r.response.status === 200).length, 1);
+  assert.equal(responses.filter((r) => r.response.status === 401).length, 7);
+  assert.equal(Number((await ctx.sql`select count(*) as n from mediapack_setup.recovery_nonces`)[0]!.n), 1);
+});
+
+test("expired, future, wrong-key and missing recovery credentials cannot claim nonces or perform recovery", async () => {
+  const token = await client();
+  const { videoId } = await upload(token);
+  await ctx.sql`update videos set upload_expires_at = now() - interval '1 hour' where id = ${videoId}::uuid`;
+  const now = Math.floor(Date.now() / 1000);
+  const invalidHeaders: Array<Record<string, string>> = [
+    {},
+    { authorization: "Bearer wrong-static-key" },
+    signedTickHeaders("wrong-signing-key"),
+    signedTickHeaders(ctx.cfg.internalTickToken!, String(now - 120)),
+    signedTickHeaders(ctx.cfg.internalTickToken!, String(now + 120)),
+  ];
+  for (const headers of invalidHeaders) {
+    const rejected = await request("/internal/tick", undefined, {}, headers);
+    assert.equal(rejected.response.status, 401, JSON.stringify(rejected.body));
+    assert.equal(rejected.body.error.code, "UNAUTHORIZED");
+    assert.equal(JSON.stringify(rejected.body).includes(ctx.cfg.internalTickToken!), false);
+  }
+  assert.equal(Number((await ctx.sql`select count(*) as n from mediapack_setup.recovery_nonces`)[0]!.n), 0);
+  const [video] = await ctx.sql`select state from videos where id = ${videoId}::uuid`;
+  assert.equal(video!.state, "uploading", "authorization must run before the expired-upload sweep");
+});
+
+test("signed recovery prunes expired nonce rows while retaining live replay protection", async () => {
+  const expired = randomUUID();
+  const retained = randomUUID();
+  await ctx.sql`insert into mediapack_setup.recovery_nonces (nonce, expires_at) values (${expired}::uuid, now() - interval '1 second'), (${retained}::uuid, now() + interval '60 seconds')`;
+  const headers = signedTickHeaders();
+  const response = await request("/internal/tick", undefined, {}, headers);
+  assert.equal(response.response.status, 200, JSON.stringify(response.body));
+  const nonces = (await ctx.sql`select nonce from mediapack_setup.recovery_nonces`).map((r) => r.nonce).sort();
+  assert.deepEqual(nonces, [retained, headers["x-mediapack-tick-nonce"]].sort());
+});
+
+test("missing signed-tick storage returns actionable 503 while existing bearer ticks remain compatible", async () => {
+  await ctx.sql`drop table mediapack_setup.recovery_nonces`;
+  try {
+    const signed = await request("/internal/tick", undefined, {}, signedTickHeaders());
+    assert.equal(signed.response.status, 503, JSON.stringify(signed.body));
+    assert.match(signed.body.error.message, /recovery.*scheduler.*setup/i);
+    assert.equal(JSON.stringify(signed.body).includes(ctx.cfg.internalTickToken!), false);
+    const bearer = await request("/internal/tick", undefined, {}, { authorization: `Bearer ${ctx.cfg.internalTickToken}` });
+    assert.equal(bearer.response.status, 200, JSON.stringify(bearer.body));
+    assert.equal(bearer.body.ok, true);
+  } finally {
+    await createRecoveryNonceTable();
+  }
 });

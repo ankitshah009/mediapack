@@ -1,6 +1,50 @@
 # Verification status
 
-This file distinguishes exercised local behavior from credentialed provider verification. It is not a successful deployment or purchase receipt.
+This file distinguishes actual provider verification from local fixtures. The newest cloud record comes first; older sections retain the historical results and account blockers that existed at their recorded dates.
+
+## Credentialed cloud verification (2026-10-18 UTC)
+
+The final Next.js r7 release uses `sandbox/mediapack-web:b355ba20b80085378c07c` and worker `sandbox/mediapack-worker:be53b19cc608a18554956` in Blaxel workspace `mediapack`. The [dashboard](https://b45bc8809f4a40e5dad83cb402719f89.preview.bl.run/app) and [Manufact MCP](https://fast-wave-awovc.run.mcp-use.com/mcp) use the same API. Ready logs and public health passed, with `database: "ok"`, test payments and no missing provider settings. The web allocation is 2048 MiB, process keep-alive is false, and the actual deletion policy is `ttl-idle: 24h` for judging. The helper still defaults to one hour unless `--idle-ttl 24h` is supplied. Standby avoids active compute charges; retained images and snapshots can incur storage charges. R7 adds one responsive text-wrapping rule to the verified r6 application; the completed paid-flow proofs below retain their actual r6 execution provenance.
+
+| Boundary | Actual evidence |
+| --- | --- |
+| Supabase | Existing account, new MediaPack project on Free in Oregon; checksummed migrations 0001/0002 applied and idempotent, 12 public app tables with RLS, private bucket and project-wide upload limit both exactly 52,428,800 bytes; trusted CA verification enabled |
+| Browser and uploads | Secure/HttpOnly session creation, two-owner isolation, real signed Storage PUT and byte/SHA identity; post-PUT reservation retry fixed and verified against the cloud |
+| Stripe | Persistent test key verified against the exact MediaPack sandbox; explicit `STRIPE_TEST_NETWORK_ID=internal`, real MPP 402/credential/receipt round trip, owned test webhook, signature rejection and deduplication |
+| Primitive | Persistent keys; app-owned enabled receiver; real work requests and results persisted and applied for both source videos |
+| Blaxel and models | 4096 MiB workers; dedicated workspace service account kept on the server; only short-lived OAuth model tokens forwarded; real gateway vision and search against fixture evidence |
+| Audio | Packaged, checksum-pinned whisper.cpp 1.9.5/base; actual talk indexing transcribed 44.9 seconds of audio in 8.598 seconds without an audio API |
+| Manufact | Same public `/mcp` and server, active r6 deployment, nine tools, caller-owned reads, view assets and error forwarding; final source-specific search submitted once and answered correctly; sole cloud environment setting is the current API origin |
+| Recovery | Private Vault/HMAC/nonce scheduler; controlled missed-dispatch recovery in 34.585 seconds, followed by an idle cron run with zero HTTP requests; final r6 origin and signed tick/replay/tamper checks verified, with 300-second nonce retention |
+
+The internal Stripe setting is explicitly test-only. It does not invent a profile, weaken live-mode checks or establish public Link-wallet compatibility. A genuine Stripe profile remains necessary for that wallet path. The current test-helper API rejects optional seller details; the buyer follows the installed SDK's single compatibility retry only after a definitive unsupported-parameter response. Unknown payment outcomes are never retried by purchasing again.
+
+The authored fixture recordings passed actual upload, probe, quote and payment paths:
+
+| Source | Payment | Index and evidence |
+| --- | --- | --- |
+| `talk-sample.mp4` | One USD 0.50 test PaymentIntent; repeat purchase returned the same receipt and one payment attempt | 23 visual frames and 9 local speech records; correctly cited Sunday 10 AM, repository link and two-minute demo; two SHA-verified frames plus a six-second H.264/AAC clip, fully decoded with ffmpeg |
+| `settings-reset.mp4` | One USD 0.50 test PaymentIntent; one entitlement, payment attempt and index operation | 27 correctly indexed frames; final r6 MCP search correctly reports 30 after reload versus saved 60, citing `f_0021` and `f_0024` at 40–48 seconds. Actual source frames at 40/46 seconds visibly confirm both values; the eight-second H.264 1280×800 clip at 40–48 seconds passed SHA-256 and full ffmpeg decoding. All 15 runtime assertions passed |
+
+The first retained-resource launch failures exposed an opaque provider error. After deleting only completed, verified task workers and superseded web hosts, the same paid packs resumed without another payment. The exact provider quota was not returned, so resource contention remains an inference. The final launcher safely reclaims completed owned workers before provisioning and reports bounded, redacted provider errors. A real service-account check reclaimed four completed workers; the final deployed frame-launch path also reclaimed its completed current-image search worker. The superseded r5 web host was removed after r6 verification. Migration 0002 and the final control code separate `worker.claimed` from factual `worker.launched`; actual launched identities are committed atomically after SDK confirmation. Historical failed attempts and their older events remain preserved.
+
+The temporal correction reviews the entire chronological index, records relevant source observations before the answer, considers later contradictory field text, and cites both states of a transition. Two real gateway regressions against the persisted settings index and one against the persisted talk index passed before deployment, without spending app allowance or inserting expected answers into model inputs. The final MCP search then passed on the new cloud worker using the existing paid index.
+
+Final checks: 65 backend tests passed; 39 worker tests passed, including actual CPU Whisper, ffmpeg and transport; all 42 SQL invariants passed on a fresh disposable PostgreSQL database with both migrations; 31 Stripe setup/buyer tests passed; 17 Supabase setup tests passed, including the real PostgreSQL upgrade/idempotency check. The 11 web tests, focused lint and final image build/TypeScript passed. Browser QA passed visible test labeling, keyboard upload controls, the video-memory disclosure, session creation, pairing, actual unpaid payment instructions and asset loading. A long next-action URL exposed phone-width overflow on the unpaid job page; r7 applies `overflow-wrap:anywhere` to that status paragraph. The existing third-party Tempo dynamic-import build warning remains. The [efficiency explanation](efficiency-and-memory.md) distinguishes historical measured token counts from projected savings and competing products.
+
+The settings pack finished with three searches, four source frames, 14,000 ms of clips and 834 evidence characters consumed; every reservation is zero. Exact frame/clip request retries preserved the same operations and ledger, and retrying the quote returned the same PaymentIntent. The talk pack used a different source and returned its own 22–31.44-second deadline evidence. Neither retry recovery nor the temporal correction required another purchase or another index.
+
+R6 recovery passed a 71-second database-only idle observation containing a successful scheduled cron run. R7 repeated all 12 recovery checks: signed request 200, replay/tampering 401, approximately 300 seconds of nonce retention, the correct Vault origin, and 70.493 idle seconds containing two successful cron runs with zero new pg_net responses or queued HTTP requests. The historical interrupted-dispatch recovery remains a separate 34.585-second proof.
+
+Final r7 readback passed. Both owned provider callbacks are enabled on the new origin; signature rejection, durable receipt and deduplication passed. The same Manufact server is active on deployment `4c0f3b54-55af-4367-8ed7-a74f9ff09fbe`, with only `MEDIAPACK_API_URL` configured. Caller-owned `get_job`/`get_pack` returned the persisted correct search and existing four frames/two clips; usage, reservations and operation IDs stayed unchanged. All nine tools and view assets passed. No new search or purchase was needed for the CSS release.
+
+Actual-source browser checks passed at widths 375 and 1280 for both payment instruction tabs, with no DOM patches or horizontal overflow. The commands use the current origin and verified sandbox CLI, state the same-owner requirement, and explain the real-profile requirement for Link. Pairing, the memory disclosure, keyboard focus and all 40 observed static asset requests passed, with no browser console errors or warnings. This is Stripe test mode; public Link wallets and Blaxel Application Runtime remain separate optional account features, not capabilities proved by this release.
+
+Final scoped cleanup removed the superseded r6 host and two eligible completed workers through the guarded reaper. The provider list then contained only `mediapack-web-r7`, deployed and in standby. Retained images remain subject to their separate storage rate.
+
+Private runtime evidence is stored in ignored mode-0600 `.blaxel/*-proof.json` files; downloaded media and owner state remain private. Source hashes, non-secret test identifiers, actual timestamps and failed attempts are preserved. No owner capability, SPT, signing secret, service credential or signed artifact URL belongs in this public record.
+
+## Historical local and deployment records
 
 ## Application and protocol checks (2026-10-17)
 

@@ -7,6 +7,7 @@ import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { createServer } from 'node:net';
+import { rootCertificates } from 'node:tls';
 import { setupSupabase, safeError, BUCKET, BUCKET_OPTIONS } from './setup-supabase.mjs';
 
 const DATABASE = 'postgresql://private-user:private-password@private-db.example.test:5432/postgres';
@@ -104,6 +105,37 @@ test('default plan is read-only, has exact required settings, and never reports 
   assert.equal(f.dbOptions().connect_timeout, 10);
   assert.equal(f.clientOptions().auth.persistSession, false);
   assert.equal(f.clientOptions().auth.autoRefreshToken, false);
+});
+
+test('optional database CA is decoded into strict SSL options and omitted from reports', async t => {
+  for (const pem of [rootCertificates[0], `${rootCertificates[0]}\n${rootCertificates[1]}\n`]) {
+    const encoded = Buffer.from(pem, 'utf8').toString('base64');
+    const f = await fixture(t, { env: `${ENV}DATABASE_CA_CERT_BASE64=${encoded}\n` });
+    const report = await setupSupabase(f.options);
+    assert.deepEqual(f.dbOptions().ssl, { ca: pem, rejectUnauthorized: true });
+    for (const value of [pem, encoded, DATABASE, KEY]) assert.ok(!JSON.stringify(report).includes(value));
+  }
+});
+
+test('malformed base64 and non-certificate PEM are rejected safely before database or storage I/O', async t => {
+  const invalid = [
+    'not-base64!', 'abc', 'YR==',
+    Buffer.from(`private-material:${KEY}`).toString('base64'),
+    Buffer.from('-----BEGIN CERTIFICATE-----\ncHJpdmF0ZQ==\n-----END CERTIFICATE-----').toString('base64'),
+    Buffer.from(`${rootCertificates[0]}\nprivate-material:${KEY}`).toString('base64'),
+  ];
+  for (const encoded of invalid) {
+    const f = await fixture(t, { env: `${ENV}DATABASE_CA_CERT_BASE64=${encoded}\n` });
+    await assert.rejects(setupSupabase(f.options), error => {
+      assert.equal(error.code, 'invalid_database_ca');
+      assert.match(error.next_action, /official Supabase CA/);
+      for (const value of [encoded, KEY, DATABASE, 'private-material']) assert.ok(!JSON.stringify(safeError(error)).includes(value));
+      return true;
+    });
+    assert.equal(f.calls.length, 0);
+    assert.equal(f.dbOptions(), undefined);
+    assert.equal(f.clientOptions(), undefined);
+  }
 });
 
 test('apply records atomic checksums, configures exact private bucket, and a second apply reuses both', async t => {

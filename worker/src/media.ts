@@ -200,7 +200,7 @@ export async function measureVideo(file: string, signal?: AbortSignal): Promise<
 
 /** Mono 16 kHz 16-bit WAV for ASR (180 s ≈ 5.8 MB, under the 25 MB transcription upload limit). */
 export async function extractAudio(path: string, outFile: string, timeoutMs = 60_000, signal?: AbortSignal): Promise<void> {
-  await runOk(FFMPEG, ["-hide_banner", "-nostdin", "-v", "error", "-i", path, "-map", "0:a:0", "-vn", "-ac", "1", "-ar", "16000", "-c:a", "pcm_s16le", "-y", outFile], { timeoutMs, signal });
+  await runOk(FFMPEG, ["-hide_banner", "-nostdin", "-v", "error", "-i", path, "-map", "0:a:0", "-vn", "-t", String(INPUT_LIMITS.maxDurationMs / 1000), "-ac", "1", "-ar", "16000", "-c:a", "pcm_s16le", "-y", outFile], { timeoutMs, signal });
 }
 
 /** Read JPEG dimensions from the SOF marker; throws if the buffer is not a JPEG. */

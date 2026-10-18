@@ -5,6 +5,7 @@ import { Api, type VideoView } from "../api/client";
 import { usePoll } from "../api/hooks";
 import { ErrorPanel, Link, Shell } from "../components/Shell";
 import { Uploader } from "../components/Uploader";
+import { VideoMemoryExplainer } from "../components/VideoMemoryExplainer";
 import { Badge, Card, Empty, Skeleton } from "../components/ui";
 import { bytes, dur } from "../lib/format";
 
@@ -74,6 +75,7 @@ export function VideosPage() {
           </ul>
         )}
       </section>
+      <VideoMemoryExplainer />
     </Shell>
   );
 }

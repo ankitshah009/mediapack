@@ -1,21 +1,24 @@
 # Blaxel costs and expiration
 
-Rechecked against public documentation on 2026-10-17 at 23:49 UTC. These are estimates, not the
-workspace's billing balance or a spending guarantee.
+Rates rechecked against official public documentation on October 18, 2026 at
+11:33 UTC. These are estimates, not the workspace's billing balance or a spending
+guarantee.
 
 **$500 should comfortably cover development and a modest demo workload.** It does
 not establish a permanent hosting budget without knowing traffic, worker duration,
 concurrency, or the credits' expiry date. The 4 GB worker upgrade fits this demo
 budget without assuming additional paid model APIs or credit purchases.
 
-## Actual usage today
+## Timestamped actual usage
 
 A read-only Billing Explorer API request filtered to workspace `mediapack`
-returned **$0.01231111686005005** in aggregate USD usage for October 17, 2026,
-midnight through 4:51:12 PM Pacific (`2026-10-17T07:00:00Z` through
-`2026-10-17T23:51:12.063Z`). That is approximately **1.23 cents**. Metering can lag
-recent builds and runtime activity, so this is a timestamped usage report rather
-than a final invoice. [Billing Explorer](https://docs.blaxel.ai/Security/Billing-Explorer-API).
+returned **$0.06580812391032317** in aggregate USD usage for **October 18, 2026,
+midnight through 4:34:03 AM Pacific** (`2026-10-18T07:00:00Z` through
+`2026-10-18T11:34:03.371Z`). That is approximately **6.58 cents**. The prior
+October 17 check was $0.01231111686005005 through 4:51 PM Pacific; it is historical,
+not today's result. Metering can lag recent builds and runtime activity, so this
+is a timestamped usage report rather than a final invoice.
+[Billing Explorer](https://docs.blaxel.ai/Security/Billing-Explorer-API).
 
 The metrics endpoint did not expose the current available credit balance or
 credit expiry. Do not subtract this usage from $500 and present the result as a
@@ -48,10 +51,22 @@ one 4 GB worker-hour = $0.1656
 | Always-active web for 30 days + 1,000 ten-minute 4 GB workers | $87.22 |
 | One 4 GB worker active for its entire 30-minute lifetime | $0.0828 |
 
-These are calculations from the listed compute rate, not measured MediaPack
-performance. The local ASR runtime and model are not yet installed or benchmarked;
-these example durations do not predict transcription speed. Startup, cleanup,
-retries, overlapping workers, and retained storage add usage.
+The table uses hypothetical durations, not measured average job cost. Actual
+4 GB cloud worker samples include:
+
+| Observed sample | Execution time | Compute for that execution interval only |
+|---|---:|---:|
+| Talk video indexing | 15.208 seconds | $0.000700 (0.070 cents) |
+| Settings video indexing | 21.932 seconds | $0.001009 (0.101 cents) |
+
+The talk sample's approximately 44.9 seconds of audio took about 8.6 seconds to
+transcribe locally. An earlier isolated ASR smoke took 7.618 seconds for 44.864
+seconds of audio; neither is a general latency promise. The indexing calculations
+are `4 × execution seconds × $0.0000115`, not complete billed job totals. They
+exclude VM startup, time outside the measured execution interval, separate
+upload/probe/search/evidence operations, retries, storage and model usage. Some
+transfer work may occur inside the measured interval; use provider metering for
+total active sandbox time instead of adding or subtracting guessed overhead.
 
 If spent entirely on worker compute, $500 buys approximately **3,019 aggregate
 4 GB active hours**, or **18,115 ten-minute runs**, before web hosting, storage,
@@ -67,16 +82,33 @@ always-on health polling and close unused preview tabs.
 [Standby control](https://docs.blaxel.ai/Sandboxes/Standby-control) describes the
 connection behavior.
 
-The web hosting script applies `ttl-idle: 1h` with action `delete`. Workers have a
-30-minute maximum lifetime; the launcher also bounds individual operations. Check
-the hosting script's reported expiration policies when reusing an existing
-sandbox.
+The hosting script defaults to `ttl-idle: 1h` with action `delete` and accepts
+`--idle-ttl` in whole hours from `1h` through `24h`. **The current r7 judging host
+uses `--idle-ttl 24h`**, verified by provider readback, while retaining
+`keepAlive=false` so automatic standby can stop compute billing when idle.
+Workers keep their 30-minute maximum lifetime and bounded operation deadlines.
+Check the helper's reported policies when reusing a sandbox. On r7, a fresh
+70.493-second observation covered two successful recovery cron runs with zero
+idle HTTP; all 12 recovery checks passed. This verifies the scheduler does not
+wake an empty workload, not that retained storage or all account usage is free.
+
+Before new launches, the bounded cleanup path can reclaim matching MediaPack
+workers only after verifying successful completed processes, ownership, image and
+no in-flight work; standby alone does not prove completion. A real service-account
+smoke deleted four eligible workers while preserving the web host. Private proof:
+`.blaxel/worker-reaper-proof.json`. This reduces retained worker storage and quota
+use; the 30-minute lifetime remains the fallback when no later launch runs cleanup.
+The final paid settings flow also exercised cleanup during ordinary deployed
+frame retrieval, reclaiming a completed current-image search worker. Both source
+flows passed; this runtime proof does not replace the timestamped billing total
+or establish the account's available credit balance.
 
 **Blaxel's idle TTL tracks resume and suspend events, not each request.** A
-continuously active sandbox can therefore expire one hour after waking even while
-being used. This is an intentional cost/availability tradeoff for the demo, not a
-traditional “one hour since the last HTTP request” policy. Multiple expiry rules
-delete on the first matching condition.
+continuously active sandbox can therefore expire after its configured interval
+even while being used. The 24h judging override avoids the 1h policy interrupting
+an active demo; it does not promise perpetual availability or 24h of free active
+compute. This is not a traditional “time since the last HTTP request” policy.
+Multiple expiry rules delete on the first matching condition.
 [Expiration policies](https://docs.blaxel.ai/Sandboxes/Expiration).
 
 Expiration deletes the sandbox and its preview. Rerun the documented hosting

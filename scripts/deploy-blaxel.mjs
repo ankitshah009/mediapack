@@ -59,7 +59,7 @@ try {
       if (!rendered.dryRun || rendered.resources?.length !== 1) throw new Error('Expected one local dry-run resource.');
       const resource = rendered.resources[0];
       const files = rendered.files ?? [];
-      const forbidden = files.filter((f) => (f.name ?? f.path ?? '').split('/').some((part) => part.startsWith('.env') || ['node_modules', '.git', '.venv', '.next', '.remember', '.playwright-mcp', 'fixtures', 'docs', '.aws', '.codex', '.agents', '.blaxel', '.projects', '.skills'].includes(part)));
+      const forbidden = files.filter((f) => (f.name ?? f.path ?? '').split('/').some((part) => part.startsWith('.env') || ['node_modules', '.git', '.venv', '.next', '.remember', '.playwright-mcp', 'fixtures', 'docs', '.aws', '.codex', '.agents', '.blaxel', '.projects', '.skills', '.temp'].includes(part)));
       if (forbidden.length) throw new Error(`Source archive contains ${forbidden.length} excluded credential/data entries; fix .blaxelignore before any upload.`);
       if (item === 'web' && (resource.kind !== 'Sandbox' || resource.spec?.runtime?.ports?.[0]?.target !== 3000 || resource.spec?.runtime?.memory !== 2048)) throw new Error('CLI web sandbox configuration did not preserve type, port3000 and memory2048.');
       if (item === 'worker' && resource.kind !== 'Sandbox') throw new Error('Worker did not render as a sandbox.');

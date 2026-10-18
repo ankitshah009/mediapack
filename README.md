@@ -8,6 +8,139 @@ One USD 0.50 **test-mode** purchase covers one immutable video for 24 hours: thr
 
 Source: [ankitshah009/mediapack](https://github.com/ankitshah009/mediapack). Start with the [release checklist and documentation map](docs/RELEASE-CHECKLIST.md), [account setup](docs/SETUP-ACCOUNTS.md), and [dated verification record](docs/verification.md). The Next.js app, shared backend, Manufact proxy, worker and migrations belong in one complete source checkout.
 
+## How it works
+
+### System topology
+
+Every client calls the same service operations in `apps/mediapack/src`. Media bytes go straight to Storage and never pass through the API or MCP process. The worker never holds the Supabase service role or the merchant Stripe key.
+
+```mermaid
+flowchart LR
+  subgraph Clients
+    B[Browser viewer<br/>/app]
+    C[Buyer CLI<br/>scripts/mediapack.mjs]
+    A[Agent via MCP]
+  end
+
+  subgraph Manufact
+    M[apps/mcp<br/>mcp-use proxy]
+  end
+
+  subgraph Blaxel
+    W[apps/web<br/>Next.js dashboard + REST<br/>/v1 /health /webhooks /internal/tick]
+    S[apps/mediapack/src<br/>shared services, contracts, adapters]
+    K[worker sandbox<br/>Node + ffmpeg, 4 GiB, bounded]
+  end
+
+  subgraph Supabase
+    DB[(Postgres<br/>videos, quotes, jobs,<br/>operations, outbox, events)]
+    ST[(Private Storage<br/>mediapack-private)]
+  end
+
+  ST2[Stripe test mode<br/>MPP / PaymentIntent]
+  P[Primitive<br/>managed mail transport]
+
+  A --> M -->|forwards capability| W
+  B --> W
+  C --> W
+  W --- S
+  S --> DB
+  B & C -.signed upload.-> ST
+  S <-->|402 challenge, verify, webhook| ST2
+  S -->|work request| P -->|webhook| W
+  P -->|launch / deliver| K
+  K -->|work_result| P
+  K -.scoped artifact access.-> ST
+```
+
+### One purchase, end to end
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant U as Client (UI / CLI / MCP)
+  participant API as apps/web + services
+  participant DB as Postgres
+  participant ST as Storage
+  participant SP as Stripe (test)
+  participant PR as Primitive
+  participant WK as Worker
+
+  U->>API: POST /v1/videos
+  API->>DB: insert video (uploading)
+  API-->>U: signed upload instructions
+  U->>ST: upload MP4/WebM (≤ 50 MiB, ≤ 180 s)
+  API->>WK: probe_video (ffprobe validates real media)
+  API->>DB: create quote (USD 0.50, 24 h pack)
+  U->>API: purchase(quote_id)
+  API-->>U: 402 MPP challenge
+  U->>SP: pay (mppx or Link)
+  SP-->>API: verified PaymentIntent (sync and/or webhook)
+  API->>DB: apply_verified_payment → job active + index_video op + outbox row
+  API->>PR: send outbox message (stable Idempotency-Key)
+  PR->>WK: work request
+  WK->>ST: write frames / transcript / index artifacts
+  WK->>PR: work_result (artifact IDs + hashes)
+  PR->>API: POST /webhooks/primitive (signed)
+  API->>DB: persist event, verify, commit result, append events
+  U->>API: search / frames / clip → 202 + operation
+  API->>DB: reserve_operation (consume_allowance in SQL)
+  Note over U,API: Client polls GET /v1/jobs/:id; UI renders only persisted events
+```
+
+### Durable work pipeline
+
+No network call happens inside a database transaction. Every side effect is written to `outbox` first and then sent by a leased dispatcher. Every inbound webhook is deduplicated by a unique key before it is acknowledged. That way a crash at any point can be resumed by `/internal/tick` and no work is lost or charged twice.
+
+```mermaid
+flowchart TD
+  R[API request or verified payment] -->|one SQL transaction| T[(operation row<br/>+ allowance reservation<br/>+ outbox row with payload hash)]
+  T --> D{/internal/tick or inline dispatch<br/>claim_outbox_batch<br/>FOR UPDATE SKIP LOCKED}
+  D -->|send, same key + payload on retry| P[Primitive]
+  P --> W[Worker runs action<br/>probe / index / search / frames / clip]
+  W -->|work_result| H[/webhooks/primitive/]
+  H -->|verify signature, unique event ID| I[(provider_events inbox)]
+  I --> C{Matches operation,<br/>generation, nonce?}
+  C -->|yes| OK[commit result + events<br/>→ job / operation succeeded]
+  C -->|no / stale| X[ignore, keep audit row]
+  D -.lease expired.-> D
+```
+
+### Payment state gate
+
+The gate runs before any code path that could charge. A repeat request while a payment is still uncertain never produces a second charge.
+
+```mermaid
+stateDiagram-v2
+  [*] --> quoted
+  quoted --> submitting: purchase(quote_id)
+  submitting --> succeeded: verified PaymentIntent<br/>(amount, currency, livemode=false)
+  submitting --> unknown: crash / timeout
+  unknown --> reconciling: retry returns 202 + status URL
+  reconciling --> succeeded: webhook or direct PI lookup
+  reconciling --> failed: positively resolved as failed
+  succeeded --> active: entitlement + index_video queued
+  active --> expired: 24 h or allowance exhausted
+  failed --> [*]
+  expired --> [*]
+```
+
+### Repository map
+
+```mermaid
+flowchart LR
+  root((mediapack))
+  root --> web[apps/web<br/>Next.js App Router UI + API routes]
+  root --> core[apps/mediapack/src<br/>services · contracts · adapters · routes · tools]
+  root --> mcp[apps/mcp<br/>MCP tools → REST]
+  root --> wk[worker/src<br/>actions · media · models · local-asr]
+  root --> sb[supabase<br/>migrations/0001_init.sql · tests/invariants.sql]
+  root --> sc[scripts<br/>buyer CLI · setup-supabase · setup-primitive · deploy/host Blaxel]
+  root --> dc[docs<br/>setup · verification · release checklist · costs]
+  web -->|relative import| core
+  mcp -->|HTTP| web
+```
+
 ## Local setup
 
 Use Node 22.22.2 or newer, npm, pnpm 12.11.2, ffmpeg/ffprobe, and Postgres 17 for database checks. Install package dependencies and prepare the server environment:

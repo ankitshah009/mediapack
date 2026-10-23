@@ -2,6 +2,7 @@
 // and returns the action-specific `result` + caller `usage` + `artifacts` manifest for the WorkResult.
 import { createHash } from "node:crypto";
 import { mkdir, readFile, stat } from "node:fs/promises";
+import { availableParallelism } from "node:os";
 import { join } from "node:path";
 import {
   codePoints, INDEX_LIMITS, INDEXER_VERSION, INPUT_LIMITS, PACK, SearchResult, sha256Hex,
@@ -10,6 +11,7 @@ import {
 import { WorkerError } from "./errors.js";
 import {
   decodeCheck, extractAudio, extractClip, extractFrameAt, firstFrameAtOrAfter, judge, probe, readJpeg, sampleFrames,
+  videoPacketPts,
   type ProbeInfo,
 } from "./media.js";
 import type { AsrModel, SearchModel, VisionModel } from "./models.js";
@@ -46,6 +48,12 @@ export function artifactId(operationId: string, generation: number, name: string
 }
 
 const zeroUsage = (): Usage => ({ searches: 0, frames: 0, clip_ms: 0, text_chars: 0 });
+
+/** Parallel workers. At least the old floor of 2, never more than 4, and never more than the item count. */
+function workerParallelism(itemCount: number, cores = availableParallelism()): number {
+  const n = Number.isFinite(cores) && cores > 0 ? Math.floor(cores) : 1;
+  return Math.max(1, Math.min(itemCount, 4, Math.max(2, n)));
+}
 
 async function mapLimit<T, R>(items: T[], limit: number, fn: (t: T, i: number) => Promise<R>): Promise<R[]> {
   const out = new Array<R>(items.length);
@@ -131,41 +139,23 @@ async function indexVideo(req: WorkRequest, d: ActionDeps): Promise<ActionOutput
   const plan = samplingPlan(info.durationMs);
   const framesDir = join(d.workDir, "frames");
   await mkdir(framesDir, { recursive: true });
-  const sampled = await sampleFrames(src.path, framesDir, { ...plan, longEdge: FRAME_LONG_EDGE, fps: info.video.fps, timeoutMs: 240_000, signal: d.signal });
-  if (sampled.length > INDEX_LIMITS.maxInternalFrames) throw new WorkerError("WORKER_FAILED", "sampling exceeded the internal frame cap", false);
-  pu.frames_sampled = sampled.length;
-  pu.ffmpeg_sample_ms = Date.now() - t0;
-  const frames = await Promise.all(sampled.map(async (s, i) => ({ id: fid(i), ptsMs: s.ptsMs, ...(await readJpeg(s.file)) })));
-
-  // Vision (≤12 images/call, ≤8 calls, concurrency 2) and ASR run concurrently.
-  const batches: typeof frames[] = [];
-  for (let i = 0; i < frames.length; i += INDEX_LIMITS.imagesPerVisionCall) batches.push(frames.slice(i, i + INDEX_LIMITS.imagesPerVisionCall));
-  if (batches.length > INDEX_LIMITS.maxVisionCalls) throw new WorkerError("WORKER_FAILED", "too many vision batches", false);
-  const vision = d.vision();
-  const visionP = mapLimit(batches, INDEX_LIMITS.visionConcurrency, async (b) => {
-    d.signal.throwIfAborted();
-    const allowed = new Set(b.map((f) => f.id));
-    const r = await vision.describe(b.map((f) => ({ frame_id: f.id, jpeg: f.buf })), d.signal);
-    pu.vision_calls = (pu.vision_calls ?? 0) + 1;
-    pu.vision_input_tokens = (pu.vision_input_tokens ?? 0) + r.usage.input_tokens;
-    pu.vision_output_tokens = (pu.vision_output_tokens ?? 0) + r.usage.output_tokens;
-    const valid = new Map<string, { description: string; visible_text: string }>();
-    for (const o of r.observations) {
-      if (!o || typeof o.frame_id !== "string" || !allowed.has(o.frame_id) || valid.has(o.frame_id)) { pu.vision_rejected_ids = (pu.vision_rejected_ids ?? 0) + 1; continue; }
-      valid.set(o.frame_id, { description: clip(String(o.description ?? ""), 400), visible_text: clip(String(o.visible_text ?? ""), 600) });
-    }
-    return valid;
-  });
-
+  // Audio extract and Whisper start before frame sampling finishes, so transcription
+  // overlaps ffmpeg. Vision still waits for the JPEGs, then runs beside any remaining ASR.
+  const wavPath = join(d.workDir, "audio.wav");
+  const cancelAsr = new AbortController();
+  const asrSignal = AbortSignal.any([d.signal, cancelAsr.signal]);
+  const wavReady: Promise<Buffer | null> = info.audio
+    ? extractAudio(src.path, wavPath, 90_000, asrSignal).then(() => readFile(wavPath))
+    : Promise.resolve(null);
   let audio: IndexDoc["audio"] = info.audio ? "available" : "absent";
   let audioError: { code: "TRANSCRIPTION_FAILED"; message: string } | undefined;
   const asrP = (async () => {
     if (!info.audio) return [] as IndexRecord[];
     const ta = Date.now();
     try {
-      const wav = join(d.workDir, "audio.wav");
-      await extractAudio(src.path, wav, 90_000, d.signal);
-      const r = await d.asr().transcribe(await readFile(wav), d.signal);
+      const wav = await wavReady;
+      if (!wav) return [] as IndexRecord[];
+      const r = await d.asr().transcribe(wav, asrSignal);
       pu.asr_calls = 1;
       pu.asr_seconds = Math.round(r.seconds * 10) / 10;
       pu.asr_ms = Date.now() - ta;
@@ -185,8 +175,52 @@ async function indexVideo(req: WorkRequest, d: ActionDeps): Promise<ActionOutput
       return [] as IndexRecord[];
     }
   })();
+  let sampled;
+  try {
+    sampled = await sampleFrames(src.path, framesDir, { ...plan, longEdge: FRAME_LONG_EDGE, fps: info.video.fps, timeoutMs: 240_000, signal: d.signal });
+  } catch (error) {
+    cancelAsr.abort();
+    await asrP;
+    throw error;
+  }
+  if (sampled.length > INDEX_LIMITS.maxInternalFrames) {
+    cancelAsr.abort();
+    await asrP;
+    throw new WorkerError("WORKER_FAILED", "sampling exceeded the internal frame cap", false);
+  }
+  pu.frames_sampled = sampled.length;
+  pu.ffmpeg_sample_ms = Date.now() - t0;
+  const frames = await Promise.all(sampled.map(async (s, i) => ({ id: fid(i), ptsMs: s.ptsMs, ...(await readJpeg(s.file)) })));
 
-  const [visionMaps, speech] = await Promise.all([visionP, asrP]);
+  // Vision (≤12 images/call, ≤8 calls, concurrency 2) keeps running beside ASR.
+  const batches: typeof frames[] = [];
+  for (let i = 0; i < frames.length; i += INDEX_LIMITS.imagesPerVisionCall) batches.push(frames.slice(i, i + INDEX_LIMITS.imagesPerVisionCall));
+  if (batches.length > INDEX_LIMITS.maxVisionCalls) {
+    cancelAsr.abort();
+    await asrP;
+    throw new WorkerError("WORKER_FAILED", "too many vision batches", false);
+  }
+  const vision = d.vision();
+  const visionP = mapLimit(batches, INDEX_LIMITS.visionConcurrency, async (b) => {
+    d.signal.throwIfAborted();
+    const allowed = new Set(b.map((f) => f.id));
+    const r = await vision.describe(b.map((f) => ({ frame_id: f.id, jpeg: f.buf })), d.signal);
+    pu.vision_calls = (pu.vision_calls ?? 0) + 1;
+    pu.vision_input_tokens = (pu.vision_input_tokens ?? 0) + r.usage.input_tokens;
+    pu.vision_output_tokens = (pu.vision_output_tokens ?? 0) + r.usage.output_tokens;
+    const valid = new Map<string, { description: string; visible_text: string }>();
+    for (const o of r.observations) {
+      if (!o || typeof o.frame_id !== "string" || !allowed.has(o.frame_id) || valid.has(o.frame_id)) { pu.vision_rejected_ids = (pu.vision_rejected_ids ?? 0) + 1; continue; }
+      valid.set(o.frame_id, { description: clip(String(o.description ?? ""), 400), visible_text: clip(String(o.visible_text ?? ""), 600) });
+    }
+    return valid;
+  });
+
+  const [visionMaps, speech] = await Promise.all([visionP, asrP]).catch(async (error: unknown) => {
+    cancelAsr.abort();
+    await asrP;
+    throw error;
+  });
   const obs = new Map<string, { description: string; visible_text: string }>();
   for (const m of visionMaps) for (const [k, v] of m) obs.set(k, v);
   pu.vision_missing_frames = frames.length - obs.size;
@@ -213,14 +247,16 @@ async function indexVideo(req: WorkRequest, d: ActionDeps): Promise<ActionOutput
   };
   const indexBuf = Buffer.from(JSON.stringify(doc));
 
-  const outFrames = await mapLimit(frames, 4, async (f) => {
-    const slot = slotByName.get(`frames/${f.id}.jpg`)!;
-    await d.store.upload(slot, f.buf, d.signal);
-    return { record_id: f.id, object_key: slot.object_key, sha256: sha256Hex(f.buf), frame_ms: f.ptsMs, width: f.width, height: f.height, bytes: f.buf.length,
-      artifact_id: artifactId(req.operation_id, req.generation, slot.name) };
-  });
   const indexSlot = slotByName.get("index.json")!;
-  await d.store.upload(indexSlot, indexBuf, d.signal);
+  const [outFrames] = await Promise.all([
+    mapLimit(frames, workerParallelism(frames.length), async (f) => {
+      const slot = slotByName.get(`frames/${f.id}.jpg`)!;
+      await d.store.upload(slot, f.buf, d.signal);
+      return { record_id: f.id, object_key: slot.object_key, sha256: sha256Hex(f.buf), frame_ms: f.ptsMs, width: f.width, height: f.height, bytes: f.buf.length,
+        artifact_id: artifactId(req.operation_id, req.generation, slot.name) };
+    }),
+    d.store.upload(indexSlot, indexBuf, d.signal),
+  ]);
   const indexSha = sha256Hex(indexBuf);
   const indexArtifactId = artifactId(req.operation_id, req.generation, "index.json");
 
@@ -329,11 +365,14 @@ async function extractFrames(req: WorkRequest, d: ActionDeps): Promise<ActionOut
   const info = await probeAccepted(src.path, d.signal);
   for (const t of ts as number[]) if (t > info.durationMs) throw new WorkerError("BAD_REQUEST", `timestamp ${t} ms is past the end (${info.durationMs} ms)`, false);
   const names = (ts as number[]).map((t, i) => ({ name: `frame_${String(i + 1).padStart(2, "0")}_${t}ms.jpg`, content_type: "image/jpeg" }));
-  const slots = await d.store.prepareUploads(names, d.signal);
-  const frames = await mapLimit(ts as number[], 2, async (t, i) => {
+  const [slots, pts] = await Promise.all([
+    d.store.prepareUploads(names, d.signal),
+    videoPacketPts(src.path, 30_000, d.signal),
+  ]);
+  const frames = await mapLimit(ts as number[], workerParallelism(ts.length), async (t, i) => {
     const file = join(d.workDir, `x_${i}.jpg`);
     // Nearest source PTS also handles a request at duration_ms by selecting the final frame.
-    const { actualMs } = await extractFrameAt(src.path, t, file, info.video.fps, 30_000, d.signal, info.startTimeS);
+    const { actualMs } = await extractFrameAt(src.path, t, file, info.video.fps, 30_000, d.signal, info.startTimeS, pts);
     const j = await readJpeg(file);
     if (j.width !== info.video.width || j.height !== info.video.height) {
       d.log?.("frame dims differ from probe", { got: `${j.width}x${j.height}`, probe: `${info.video.width}x${info.video.height}` });

@@ -79,7 +79,10 @@ test("extract_frames: actual_ms within one frame, full-res JPEGs decode", async 
   const ts = [0, 12_345, 45_139, 47_592, 53_100];
   const req = await makeReq("extract_frames", SETTINGS, { timestamps_ms: ts });
   const store = localStore(req, SETTINGS, dir);
+  const packetScans = () => spawnLog.filter((s) => s.cmd === FFPROBE && s.args.includes("packet=pts_time")).length;
+  const scansBefore = packetScans();
   const r = await executeRequest(req, { store, log: () => {} });
+  assert.equal(packetScans() - scansBefore, 1, "one packet scan is shared by every requested frame");
   assert.equal(r.status, "succeeded", JSON.stringify(r.error));
   const frames = (r.result as { frames: { requested_ms: number; actual_ms: number; width: number; height: number; object_key: string; sha256: string }[] }).frames;
   assert.equal(frames.length, ts.length);

@@ -3,7 +3,7 @@
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { availableParallelism, tmpdir } from "node:os";
 import { join } from "node:path";
 import { INPUT_LIMITS } from "./contracts/index.js";
 import { WorkerError } from "./errors.js";
@@ -54,6 +54,13 @@ export function parseWhisperSegments(raw: unknown, seconds: number): AsrSegment[
   }).filter((s) => s.text && s.end > s.start);
 }
 
+/** whisper.cpp intra-op threads. `--processors` stays 1 so chunk splits do not move segment times.
+ *  Cap at 4: the 4 GB worker also runs ffmpeg, and a shared host can report many CPUs. */
+export function whisperThreadCount(cores = availableParallelism()): number {
+  const n = Number.isFinite(cores) && cores > 0 ? Math.floor(cores) : 1;
+  return Math.max(1, Math.min(4, n));
+}
+
 export interface LocalAsrOptions {
   binary?: string;
   modelPath?: string;
@@ -83,7 +90,7 @@ export class WhisperCppAsr implements AsrModel {
       const input = join(dir, "audio.wav"), output = join(dir, "transcript");
       await writeFile(input, wav, { signal: bounded });
       const result = await run(binary, [
-        "--model", modelPath, "--file", input, "--threads", "2", "--processors", "1",
+        "--model", modelPath, "--file", input, "--threads", String(whisperThreadCount()), "--processors", "1",
         "--no-gpu", "--language", "auto", "--output-json", "--output-file", output,
       ], { timeoutMs, signal: bounded, maxOutputBytes: 64 * 1024 });
       bounded.throwIfAborted();

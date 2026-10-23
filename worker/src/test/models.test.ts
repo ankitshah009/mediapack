@@ -5,6 +5,7 @@ import { test } from "node:test";
 import { INDEX_LIMITS, SearchResult } from "../contracts/index.js";
 import { buildIndexText, SAMPLING_LIMITATION, type IndexDoc } from "../actions.js";
 import { OpenAIAsr, OpenAISearch, OpenAIVision } from "../models.js";
+import { spawnLog } from "../proc.js";
 import { executeRequest, type ModelFactories } from "../worker.js";
 import { fakeOpenAIFetch, localStore, makeReq, SETTINGS, TALK, talkTranscript, tmp, type FakeOpenAIOptions } from "./helpers.js";
 
@@ -53,7 +54,12 @@ test("index_video (silent): batches <=12 images, validates IDs, audio absent, wr
 
 test("index_video (speech): whisper segments become s_#### records; ASR failure is a distinct 'failed' state", async () => {
   const transcript = await talkTranscript();
+  const spawnedAt = spawnLog.length;
   const ok = await indexFixture(TALK, { transcript: { segments: transcript } });
+  const spawned = spawnLog.slice(spawnedAt);
+  const audioAt = spawned.findIndex((s) => s.args.includes("pcm_s16le"));
+  const sampleAt = spawned.findIndex((s) => s.args.includes("image2"));
+  assert.ok(audioAt >= 0 && sampleAt > audioAt, "audio extract starts before frame sampling so transcription overlaps decode");
   assert.equal(ok.r.status, "succeeded", JSON.stringify(ok.r.error));
   const res = ok.r.result as { audio: string; index_object_key: string; record_counts: { speech: number } };
   assert.equal(res.audio, "available");

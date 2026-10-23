@@ -3,9 +3,16 @@
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { readdir, readFile, stat } from "node:fs/promises";
+import { availableParallelism } from "node:os";
 import { join } from "node:path";
 import { INPUT_LIMITS } from "./contracts/index.js";
 import { runOk } from "./proc.js";
+
+/** Decoder/encoder threads. Capped so a 4 GB worker still has a core for Whisper. */
+export function ffmpegThreadCount(cores = availableParallelism()): number {
+  const n = Number.isFinite(cores) && cores > 0 ? Math.floor(cores) : 1;
+  return Math.max(1, Math.min(4, n > 1 ? n - 1 : 1));
+}
 
 export const FFMPEG = process.env.FFMPEG_PATH ?? "ffmpeg";
 export const FFPROBE = process.env.FFPROBE_PATH ?? "ffprobe";
@@ -126,7 +133,7 @@ export async function sampleFrames(path: string, outDir: string, o: { intervalMs
   const step = (o.intervalMs / 1000 - half).toFixed(4);
   const vf = `select='isnan(prev_selected_t)+gte(t-prev_selected_t,${step})',showinfo,${scaleLongEdge(o.longEdge)}`;
   const r = await runOk(FFMPEG, [
-    "-hide_banner", "-nostdin", "-loglevel", "info", "-i", path, "-map", "0:v:0",
+    "-hide_banner", "-nostdin", "-loglevel", "info", "-threads", String(ffmpegThreadCount()), "-i", path, "-map", "0:v:0",
     "-vf", vf, "-fps_mode", "vfr", "-frames:v", String(o.maxFrames), "-q:v", "4", "-f", "image2", join(outDir, "s_%04d.jpg"),
   ], { timeoutMs: o.timeoutMs, maxOutputBytes: 16 * 1024 * 1024, signal: o.signal });
   const infos = parseShowinfo(r.stderr);
@@ -137,17 +144,23 @@ export async function sampleFrames(path: string, outDir: string, o: { intervalMs
   return files.map((f, i) => ({ index: i, ptsMs: Math.round(infos[i]!.ptsTime * 1000), file: join(outDir, f) }));
 }
 
-/** Nearest decoded frame to `ms` (ties -> earlier), including variable-rate sources. */
-export async function extractFrameAt(path: string, ms: number, outFile: string, _fps: number, timeoutMs = 30_000, signal?: AbortSignal, sourceStartS = 0): Promise<{ actualMs: number }> {
-  if (!Number.isInteger(ms) || ms < 0) throw new Error("timestamp must be a non-negative integer");
-  // Packet timestamps avoid decoding the whole video and do not assume average FPS is
-  // the local frame spacing. Sources are already bounded to 50 MiB / 180 seconds.
+/** One packet-timestamp scan, shared by every frame taken from the same source. */
+export async function videoPacketPts(path: string, timeoutMs = 30_000, signal?: AbortSignal): Promise<number[]> {
   const packets = await runOk(FFPROBE, ["-v", "error", "-select_streams", "v:0", "-show_entries", "packet=pts_time", "-of", "csv=p=0", path], { timeoutMs, signal });
   const pts = packets.stdout.split("\n").map((line) => line.trim().replace(/,$/, ""))
     .filter((line) => line && line !== "N/A").map(Number).filter(Number.isFinite).sort((a, b) => a - b);
   if (!pts.length) throw new Error("video has no presentation timestamps");
+  return pts;
+}
+
+/** Nearest decoded frame to `ms` (ties -> earlier), including variable-rate sources. */
+export async function extractFrameAt(path: string, ms: number, outFile: string, _fps: number, timeoutMs = 30_000, signal?: AbortSignal, sourceStartS = 0, pts?: readonly number[]): Promise<{ actualMs: number }> {
+  if (!Number.isInteger(ms) || ms < 0) throw new Error("timestamp must be a non-negative integer");
+  // Packet timestamps avoid decoding the whole video and do not assume average FPS is
+  // the local frame spacing. Sources are already bounded to 50 MiB / 180 seconds.
+  const list = pts ?? await videoPacketPts(path, timeoutMs, signal);
   const target = sourceStartS + ms / 1000;
-  const nearest = pts.reduce((best, p) => Math.abs(p - target) < Math.abs(best - target) - 0.000001 ? p : best, pts[0]!);
+  const nearest = list.reduce((best, p) => Math.abs(p - target) < Math.abs(best - target) - 0.000001 ? p : best, list[0]!);
   const seek = Math.max(0, nearest - sourceStartS - 1);
   const r = await runOk(FFMPEG, [
     "-hide_banner", "-nostdin", "-loglevel", "info", "-copyts", "-ss", seek.toFixed(6), "-i", path, "-map", "0:v:0",
@@ -182,7 +195,7 @@ export async function extractClip(path: string, startMs: number, endMs: number, 
     "-t", ((endMs - startMs) / 1000).toFixed(3), "-map", "0:v:0",
     ...(withAudio ? ["-map", "0:a:0?"] : []),
     "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2",
-    "-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-pix_fmt", "yuv420p",
+    "-c:v", "libx264", "-threads", String(ffmpegThreadCount()), "-preset", "veryfast", "-crf", "23", "-pix_fmt", "yuv420p",
     ...(withAudio ? ["-c:a", "aac", "-b:a", "128k"] : ["-an"]),
     "-movflags", "+faststart", "-y", outFile,
   ];

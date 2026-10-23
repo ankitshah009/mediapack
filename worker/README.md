@@ -114,8 +114,10 @@ are fixed to revision `5359861c739e955e79d9a303bcbc70fb988958b1`, SHA-256
 Docker verifies both downloads during the build, and the adapter verifies the
 model before transcription. No engine/model download occurs during a job.
 
-The runtime uses two CPU threads, one processor, GPU disabled and automatic
-language detection. It reuses ffmpeg's mono 16 kHz, 16-bit PCM audio. WAV duration
+The runtime uses one processor and up to four CPU threads (`min(4, available cores)`),
+GPU disabled and automatic language detection. Audio extract starts before frame
+sampling finishes, so transcription overlaps ffmpeg. Frame grabs share one packet
+timestamp scan and decode in parallel. It reuses ffmpeg's mono 16 kHz, 16-bit PCM audio. WAV duration
 comes from its data chunks, not a guessed header length; JSON segment offsets
 are milliseconds and map exactly into the existing ASR seconds interface.
 Transcription has a 300-second limit within the overall operation deadline;

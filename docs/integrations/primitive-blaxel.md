@@ -93,7 +93,7 @@ to the earlier verified `b3457c6569418756b9492` image. The image verifies source
 checksums during build, and the adapter verifies the model before transcription.
 There is no first-job model download or automatic paid transcription fallback.
 
-Whisper uses two CPU threads, GPU disabled and automatic language detection. WAV
+Whisper uses one processor and up to four CPU threads, GPU disabled and automatic language detection. Audio extract overlaps frame sampling. WAV
 and JSON files stay inside operation scratch directories and are removed on
 completion/failure. Transcription has a 300-second deadline within the overall
 operation deadline. Missing/modified models produce actionable

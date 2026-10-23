@@ -4,11 +4,18 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { extractAudio } from "../media.js";
-import { parseWhisperSegments, wavDurationSeconds, WhisperCppAsr } from "../local-asr.js";
+import { parseWhisperSegments, wavDurationSeconds, WhisperCppAsr, whisperThreadCount } from "../local-asr.js";
 import { OpenAIVision } from "../models.js";
 import { spawnLog } from "../proc.js";
 import { executeRequest } from "../worker.js";
 import { fakeOpenAIFetch, localStore, makeReq, TALK } from "./helpers.js";
+
+test("whisper threads follow the CPU and stay inside 1..4", () => {
+  assert.equal(whisperThreadCount(1), 1);
+  assert.equal(whisperThreadCount(2), 2);
+  assert.equal(whisperThreadCount(8), 4);
+  assert.equal(whisperThreadCount(0), 1);
+});
 
 function wav(seconds: number): Buffer {
   const dataSize = Math.round(seconds * 32000);
@@ -80,7 +87,7 @@ test("actual CPU Whisper indexes spoken fixture with production ASR, correct sou
   const command = spawnLog.findLast((call) => call.args.includes("--output-json"));
   assert.ok(command);
   assert.ok(command.args.includes("--no-gpu"));
-  assert.equal(command.args[command.args.indexOf("--threads") + 1], "2");
+  assert.equal(command.args[command.args.indexOf("--threads") + 1], String(whisperThreadCount()));
   assert.equal(command.args[command.args.indexOf("--language") + 1], "auto");
   const wavIndex = command.args.indexOf("--file");
   await assert.rejects(readFile(command.args[wavIndex + 1]), { code: "ENOENT" });
